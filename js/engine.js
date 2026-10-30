@@ -54,6 +54,7 @@ export function migrate(s) {
   s.log = Array.isArray(s.log) ? s.log : [];
   s.album = Array.isArray(s.album) ? s.album : [];
   s.wxDays = s.wxDays || {};
+  s.room = s.room || {};
   s.beings.forEach(b => {
     b.id = b.id || uid();
     b.nameAt = b.nameAt || 0;
@@ -255,6 +256,8 @@ export function merge(a, b) {
   b.log.forEach(e => { if (!seen.has(logKey(e))) { out.log.push(clone(e)); seen.add(logKey(e)); } });
   out.log.sort((p, q) => q.t - p.t); out.log = out.log.slice(0, 60);
   out.wxDays = { ...(b.wxDays || {}), ...(out.wxDays || {}) };
+  out.room = out.room || {};
+  for (const [slot, v] of Object.entries(b.room || {})) if ((v?.at || 0) > (out.room[slot]?.at || 0)) out.room[slot] = clone(v);
   if ((b.wxNow?.t || 0) > (out.wxNow?.t || 0)) out.wxNow = clone(b.wxNow);
   const ks = new Set(out.album.map(k => k.k));
   b.album.forEach(k => { if (!ks.has(k.k)) out.album.push(clone(k)); });

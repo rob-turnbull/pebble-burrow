@@ -9,6 +9,7 @@ import { GistSync } from './sync.js';
 import * as P from './personality.js';
 import * as Snd from './sound.js';
 import { GAMES, openGame } from './games.js';
+import * as R from './room.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
 
 /* ---------------- local persistence ---------------- */
@@ -29,7 +30,7 @@ const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZon
 
 /* ---------------- ui state ---------------- */
 const app = document.getElementById('app');
-let gamesOpen = false;
+let gamesOpen = false, scene = 'hill', arranging = false, pickSlot = '';
 let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
 let panelNote = '', placeResults = [], placeBusy = false, syncBusy = false, syncMsg = '', syncErr = false;
 let helperNote = '', helperOk = null, nudgesOn = false;
@@ -128,6 +129,7 @@ function applyEnv() {
     orb.style.left = (6 + 80 * env.t) + '%';
     orb.style.top = (58 - 46 * Math.sin(Math.PI * env.t)) + '%';
   }
+  st.dataset.wx = env.wx ? env.kind : '';
   fx?.set(env.kind, env.wx?.wind || 0);
   Snd.ambience(env.kind, env.phase);
   paintDecor();
@@ -160,6 +162,7 @@ function earnEnvKeepsakes() {
   if (firsts[env.kind]) got = E.keepsake(S, 'wx:' + env.kind, firsts[env.kind][0], firsts[env.kind][1], now) || got;
   if (env.sea.events.includes('halloween')) got = E.keepsake(S, 'halloween:' + y, '🎃', `halloween ${y} on the hill. the pumpkin hat is yours to keep`, now) || got;
   if (E.isBirthday(S)) got = E.keepsake(S, 'bday:' + y, '🎂', `your birthday, ${y}. they knew. the party hat is yours to keep`, now) || got;
+  if (env.sea.events.includes('lights')) got = E.keepsake(S, 'lights:' + (new Date().getMonth() === 0 ? y - 1 : y), '✨', 'the winter lights went up on the door', now) || got;
   if (env.sea.events.includes('newyear')) got = E.keepsake(S, 'newyear:' + y, '🎆', `a new year together, ${y}`, now) || got;
   if (got) touch();
 }
@@ -253,21 +256,31 @@ function renderBurrow() {
       <p class="sub">${S.beings.map(b => esc(E.first(b))).join(' & ')} · together since ${fmtDay(S.created)}</p></div>
     <div class="row"><span id="syncpill" class="pill"></span><button class="ghost icon" id="snd" aria-pressed="${Snd.enabled}" aria-label="${Snd.enabled ? 'turn sound off' : 'turn sound on'}">${Snd.enabled ? '🔊' : '🔇'}</button><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
   </header>
-  <div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
+  ${scene === 'room'
+  ? `<div class="stage room ${party ? 'party' : ''}" id="stage" data-phase="day">${R.roomHTML(S, { arranging, pick: pickSlot })}
+      <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
+      <button class="doorbtn" id="go-out">🚪 outside</button>
+    </div>`
+  : `<div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
     <div class="sky-dim"></div><div id="orb" class="orb"></div>
-    <div class="hill back"></div><div class="door"><i></i></div><div class="hill"></div>
+    <div class="hill back"></div><button class="door" id="go-in" aria-label="go inside the burrow"><i></i></button><div class="hill"></div>
     <div class="decor" id="decor"></div>
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
+    <button class="doorbtn corner" id="go-in2">🏠 inside</button>
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
     <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${art(b.sp)}<span class="shadow"></span></button>`).join('')}</div>
-  </div>
+  </div>`}
   <div id="below"></div>`;
   on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
   on('snd', () => { const v = Snd.toggle(); const b = $('snd'); b.textContent = v ? '🔊' : '🔇'; b.setAttribute('aria-pressed', v); b.setAttribute('aria-label', v ? 'turn sound off' : 'turn sound on'); Snd.ambience(env.kind, env.phase); });
   on('wxchip', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   const stage = $('stage');
-  fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900);
+  if (scene === 'hill') { fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900); } else fx = null;
+  const goIn = () => { scene = 'room'; washMode = false; spongeEl = null; Snd.play('tap'); renderBurrow(); };
+  on('go-in', goIn); on('go-in2', goIn);
+  on('go-out', () => { scene = 'hill'; arranging = false; pickSlot = ''; spongeEl = null; Snd.play('tap'); renderBurrow(); });
+  stage.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => { if (!arranging) return; pickSlot = pickSlot === b.dataset.slot ? '' : b.dataset.slot; renderBurrow(); });
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
@@ -279,7 +292,8 @@ function sessionSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 function update() {
   if (!S || view === 'setup') return;
   const now = Date.now();
-  document.querySelectorAll('.being').forEach((el, i) => { const b = S.beings[i]; if (!b) return;
+  if (scene === 'room' && S.beings.some((b, i) => { const el = beingEl(i); return el && el.classList.contains('inbed') !== !!b.napping; })) { renderBurrow(); return; }
+  document.querySelectorAll('.being').forEach((el) => { const i = +el.dataset.i, b = S.beings[i]; if (!b) return;
     el.classList.toggle('selected', i === sel);
     el.classList.toggle('napping', b.napping);
     el.classList.toggle('glow', !!(b.glowUntil && b.glowUntil > now));
@@ -314,6 +328,7 @@ function update() {
   <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
   </section>
+  ${scene === 'room' ? roomPanelHTML() : ''}
   ${albumHTML()}
   ${installHTML()}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
@@ -326,6 +341,9 @@ function update() {
   on('a-play', () => act('play')); on('a-hug', () => act('hug'));
   on('i-install', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; update(); });
   on('album-more', () => { albumAll = !albumAll; update(); });
+  on('arrange', () => { arranging = !arranging; pickSlot = ''; renderBurrow(); });
+  below.querySelectorAll('[data-place]').forEach(p => p.onclick = () => { R.place(S, pickSlot, p.dataset.place); pickSlot = ''; Snd.play('tap'); touch(); renderBurrow();
+    const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
   below.querySelectorAll('[data-c]').forEach(c => c.onclick = () => feed(c.dataset.c));
   below.querySelectorAll('.card').forEach(c => c.onclick = e => { if (e.target.closest('button,input')) return; sel = +c.dataset.i; update(); });
   below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; wearing = -1; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
@@ -352,6 +370,20 @@ function cardHTML(b, i) {
     <div class="row between"><span class="meta">${SPECIES[b.sp].label} · ${E.count(b, 'feasts')} feasts · ${E.count(b, 'hugs')} hugs · ${E.count(b, 'boings')} boings</span>
       ${renaming === i ? '' : `<span class="row tight"><button class="linkbtn" data-wearing="${i}">${wearing === i ? 'done' : 'dress up'}</button><button class="linkbtn" data-rename="${i}">rename</button></span>`}</div>
   </article>`;
+}
+
+function roomPanelHTML() {
+  const have = R.unlocked(S), all = Object.keys(R.FURNITURE);
+  const slot = pickSlot && R.SLOTS[pickSlot], current = pickSlot && S.room?.[pickSlot]?.item;
+  return `<section class="feasts roompanel"><div class="row between"><h2>the burrow</h2><button class="btn" id="arrange">${arranging ? 'done arranging' : 'arrange the room'}</button></div>
+    ${arranging ? (slot ? `<p class="hint">choose something for the <strong>${slot.label}</strong>:</p>
+      <div class="cheeses">${have.filter(id => R.fits(id, pickSlot)).map(id => `<button class="cheese ${current === id ? 'on' : ''}" data-place="${id}">${R.FURNITURE[id].e} ${R.FURNITURE[id].label}</button>`).join('') || '<span class="hint">nothing in your collection fits here yet.</span>'}
+      ${current ? `<button class="cheese" data-place="">clear it</button>` : ''}</div>`
+      : `<p class="hint">tap a dotted spot in the room to put something there.</p>`) : `<p class="hint">napping beings sleep in the bed. grown beings pick a favourite spot once their kind of thing is in the room.</p>`}
+    <p class="collection">${all.map(id => have.includes(id) ? `<span title="${R.FURNITURE[id].label}">${R.FURNITURE[id].e}</span>` : `<span class="locked" title="${esc(R.FURNITURE[id].label)}: ${esc(R.FURNITURE[id].hint)}">🔒</span>`).join('')}
+      <span class="hint">${have.length} of ${all.length} collected</span></p>
+    ${have.length < all.length ? `<details><summary class="hint">how to find the rest</summary><ul class="hints">${all.filter(id => !have.includes(id)).map(id => `<li>${esc(R.FURNITURE[id].label)}: ${esc(R.FURNITURE[id].hint)}</li>`).join('')}</ul></details>` : ''}
+  </section>`;
 }
 
 function albumHTML() {

@@ -317,3 +317,54 @@ details.form[open]{gap:12px}
 .sheet svg .eye-closed,.sheet svg .hat,.sheet svg .smudge,.sheet svg .scarf,.sheet svg .w{display:none}
 .sheet svg[data-wear="flowers"] .w-flowers,.sheet svg[data-wear="bow"] .w-bow,.sheet svg[data-wear="star"] .w-star,
 .sheet svg[data-wear="pumpkin"] .w-pumpkin,.sheet svg[data-wear="scarf"] .w-scarf,.sheet svg[data-wear="party"] .w-party{display:inline}
+
+/* ---------------- inside the burrow ---------------- */
+button.door{border:0;padding:0;cursor:pointer;z-index:2}
+button.door:hover{filter:brightness(1.12)}
+button.door:focus-visible{outline:3px solid var(--butter);outline-offset:3px}
+.stage.room{--wall:#e9d7bf;--wall2:#dcc5a8;--floor:#b98d62;--floor2:#a87c52;--glass-top:var(--top);--glass-bot:var(--bot)}
+.stage.room[data-phase="night"]{--wall:#5a4a5f;--wall2:#4c3e52;--floor:#5e4636;--floor2:#523c2e}
+.stage.room[data-phase="dusk"],.stage.room[data-phase="dawn"]{--wall:#e3c3b0;--wall2:#d4b098}
+.room-wall{position:absolute;inset:0 0 34% 0;background:repeating-linear-gradient(90deg,var(--wall) 0 38px,var(--wall2) 38px 40px);border-radius:28px 28px 0 0;transition:background 2s}
+.room-floor{position:absolute;left:0;right:0;bottom:0;height:34%;background:repeating-linear-gradient(90deg,var(--floor) 0 56px,var(--floor2) 56px 58px);transition:background 2s}
+.rug{position:absolute;left:28%;right:22%;top:30%;height:44%;border-radius:50%;background:radial-gradient(ellipse,#e57fa8 0 34%,#f2c94c 35% 52%,#7fb8d6 53% 70%,transparent 71%);opacity:.75}
+.window{position:absolute;left:38%;top:9%;width:24%;aspect-ratio:1.15;max-width:100%;border-radius:50% 50% 8px 8px;background:#8b6a4c;padding:6px;box-shadow:0 4px 0 #6f523a}
+.pane{position:relative;width:100%;height:100%;border-radius:50% 50% 4px 4px;overflow:hidden;background:linear-gradient(180deg,var(--glass-top),var(--glass-bot))}
+.pane::before{content:"";position:absolute;inset:0;opacity:var(--night);background-image:radial-gradient(1.5px 1.5px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 70% 20%,#fff,transparent),radial-gradient(1.5px 1.5px at 50% 55%,#fffb,transparent)}
+.pane::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;background:#8b6a4c;box-shadow:0 0 0 0 #8b6a4c}
+.w-orb{position:absolute;right:18%;top:16%;width:26%;aspect-ratio:1;border-radius:50%;background:#f6cf4f;box-shadow:0 0 12px #f6cf4f99}
+.stage.room[data-phase="night"] .w-orb{background:#eef0ff;box-shadow:inset -5px -2px 0 #cfd3ee}
+.stage.room[data-wx="rain"] .w-orb,.stage.room[data-wx="storm"] .w-orb,.stage.room[data-wx="clouds"] .w-orb,.stage.room[data-wx="fog"] .w-orb{opacity:.3}
+.w-wx{position:absolute;inset:0}
+.stage.room[data-wx="rain"] .w-wx,.stage.room[data-wx="drizzle"] .w-wx,.stage.room[data-wx="storm"] .w-wx{background:repeating-linear-gradient(105deg,transparent 0 7px,#c8dcff99 7px 8px);animation:rainpane .5s linear infinite}
+.stage.room[data-wx="snow"] .w-wx{background-image:radial-gradient(2px 2px at 20% 10%,#fff,transparent),radial-gradient(2px 2px at 60% 40%,#fff,transparent),radial-gradient(2px 2px at 80% 70%,#fff,transparent),radial-gradient(2px 2px at 35% 80%,#fff,transparent);background-size:100% 100%;animation:snowpane 3s linear infinite}
+.stage.room[data-wx="fog"] .w-wx,.stage.room[data-wx="clouds"] .w-wx{background:linear-gradient(180deg,transparent,#e8ecf2bb)}
+.lights-strand{position:absolute;left:4%;right:4%;top:4%;height:14px;background:radial-gradient(circle,#f6cf4f 3px,transparent 4px) 0 0/26px 14px,radial-gradient(circle,#e57fa8 3px,transparent 4px) 13px 4px/26px 14px;filter:drop-shadow(0 0 4px #fffa);animation:twinkle 1.6s ease-in-out infinite}
+.bed{position:absolute;left:4%;bottom:12%;width:44%;height:28%;max-width:100%}
+.bed::before{content:"";position:absolute;inset:18% 0 0 0;border-radius:16px 16px 6px 6px;background:#8b6a4c;box-shadow:0 5px 0 #6f523a}
+.pillow{position:absolute;left:6%;top:6%;width:28%;height:30%;border-radius:12px;background:#fbf6ea;z-index:2}
+.blanket{position:absolute;left:30%;right:3%;top:30%;bottom:16%;border-radius:12px 12px 6px 6px;z-index:4;
+  background:repeating-linear-gradient(45deg,#7fb8d6 0 10px,#9fcbe2 10px 20px);box-shadow:inset 0 6px 0 #fff6}
+.sleepers{position:absolute;inset:0;z-index:3}
+.being.inbed{position:absolute;bottom:34%;width:42%;animation:breathe 4.5s ease-in-out infinite}
+.being.inbed .shadow{display:none}
+.room-beings{bottom:14%;display:block;left:0;right:0;height:60%;pointer-events:none}
+.being.inroom{position:absolute;bottom:0;width:clamp(96px,24vw,132px);pointer-events:auto}
+.slot{position:absolute;width:18%;height:20%;max-width:100%;border:0;background:none;padding:0;display:grid;place-items:end center;z-index:1}
+.slot.wall,.slot.sill{place-items:center}
+.slot.sill{height:12%;width:16%}
+.slot .furn{font-size:clamp(34px,9vw,52px);line-height:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.15))}
+.slot.sill .furn{font-size:clamp(22px,6vw,32px)}
+.slot.arranging{border:2px dashed color-mix(in srgb,#2f2a3a 35%,transparent);border-radius:12px;background:color-mix(in srgb,#fff 25%,transparent);cursor:pointer;z-index:5}
+.slot.picking{border-color:var(--butter);background:color-mix(in srgb,var(--butter) 30%,transparent)}
+.slot .plus{font-size:22px;font-weight:800;color:#2f2a3a99;align-self:center}
+.doorbtn{position:absolute;right:12px;top:12px;z-index:6;border:0;border-radius:14px;padding:6px 12px;font-weight:800;font-size:13px;background:color-mix(in srgb,#fff 78%,transparent);color:#2f2a3a}
+.stage.room[data-phase="night"] .doorbtn{background:color-mix(in srgb,#1b1d3a 70%,transparent);color:#eeebf7}
+.roompanel .cheese.on{background:var(--butter);color:var(--butter-ink);border-color:var(--butter)}
+.collection{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:24px}
+.collection .locked{opacity:.45;font-size:16px}
+.collection .hint{font-size:12px;margin-left:4px}
+.hints{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink-soft)}
+@keyframes rainpane{to{background-position:0 16px}}
+@keyframes snowpane{to{background-position:0 40px,0 40px,0 40px,0 40px}}
+.doorbtn.corner{top:auto;bottom:10px;right:10px}
