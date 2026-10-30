@@ -119,5 +119,5 @@ export class WeatherFX {
     snow ? c.fill() : c.stroke();
     this.raf = requestAnimationFrame(this.loop);
   }
-  lightning() { this.flash.classList.remove('go'); void this.flash.offsetWidth; this.flash.classList.add('go'); }
+  lightning() { this.flash.classList.remove('go'); void this.flash.offsetWidth; this.flash.classList.add('go'); this.onThunder?.(); }
 }

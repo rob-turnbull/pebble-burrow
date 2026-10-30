@@ -7,6 +7,7 @@ import { seasonal, decorKey } from './seasons.js';
 import { fetchWeather, searchPlaces, locateMe, WeatherFX, kindIcon, KIND_LABEL, isCold, WEATHER_TTL } from './weather.js';
 import { GistSync } from './sync.js';
 import * as P from './personality.js';
+import * as Snd from './sound.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
 
 /* ---------------- local persistence ---------------- */
@@ -126,6 +127,7 @@ function applyEnv() {
     orb.style.top = (58 - 46 * Math.sin(Math.PI * env.t)) + '%';
   }
   fx?.set(env.kind, env.wx?.wind || 0);
+  Snd.ambience(env.kind, env.phase);
   paintDecor();
   const chip = $('wxchip');
   if (chip) {
@@ -247,7 +249,7 @@ function renderBurrow() {
   <header class="top">
     <div><h1>${esc(S.owner)}${/s$/i.test(S.owner) ? "'" : "'s"} burrow</h1>
       <p class="sub">${S.beings.map(b => esc(E.first(b))).join(' & ')} · together since ${fmtDay(S.created)}</p></div>
-    <div class="row"><span id="syncpill" class="pill"></span><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
+    <div class="row"><span id="syncpill" class="pill"></span><button class="ghost icon" id="snd" aria-pressed="${Snd.enabled}" aria-label="${Snd.enabled ? 'turn sound off' : 'turn sound on'}">${Snd.enabled ? '🔊' : '🔇'}</button><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
   </header>
   <div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
     <div class="sky-dim"></div><div id="orb" class="orb"></div>
@@ -260,9 +262,10 @@ function renderBurrow() {
   </div>
   <div id="below"></div>`;
   on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
+  on('snd', () => { const v = Snd.toggle(); const b = $('snd'); b.textContent = v ? '🔊' : '🔇'; b.setAttribute('aria-pressed', v); b.setAttribute('aria-label', v ? 'turn sound off' : 'turn sound on'); Snd.ambience(env.kind, env.phase); });
   on('wxchip', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   const stage = $('stage');
-  fx = new WeatherFX(stage);
+  fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900);
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
@@ -371,7 +374,7 @@ function care(i, fn, after) {
   const grew = E.checkGrowth(S, now);
   touch(); update();
   after?.();
-  grew.forEach(({ b, stage }, k) => setTimeout(() => { const j = S.beings.indexOf(b); fx_(j, stage === 'grown' ? '🌳' : '🌱', 3); say(j, stage === 'grown' ? 'i’m all grown! (still small though)' : 'i think i grew a little!', 4200); }, 1400 + k * 600));
+  grew.forEach(({ b, stage }, k) => setTimeout(() => { const j = S.beings.indexOf(b); fx_(j, stage === 'grown' ? '🌳' : '🌱', 3); Snd.play('grow'); say(j, stage === 'grown' ? 'i’m all grown! (still small though)' : 'i think i grew a little!', 4200); }, 1400 + k * 600));
   return true;
 }
 function feed(cid) {
@@ -380,7 +383,7 @@ function feed(cid) {
   if (b.full >= 96) { cheeseOpen = false; update(); say(sel, 'so full. saving room for tomorrow.'); return; }
   cheeseOpen = false;
   care(sel, (s, x, now) => E.feed(s, x, c, now, D.dev), () => {
-    anim(sel, 'munch'); fx_(sel, '🧀', 1);
+    anim(sel, 'munch'); fx_(sel, '🧀', 1); Snd.play('munch'); Snd.buzz([8, 60, 8, 60, 8]);
     setTimeout(() => { fx_(sel, '💛', 3); say(sel, P.feedLine(S, S.beings[sel], cid === 'crumb' ? 'a tiny crumb' : cid)); }, 1000);
   });
 }
@@ -388,17 +391,17 @@ function act(kind) {
   const b = S.beings[sel];
   if (b.napping) { say(sel, 'zzz… (wake me first?)'); return; }
   if (kind === 'play') care(sel, (s, x, now) => E.play(s, x, now, D.dev), () => {
-    anim(sel, 'boing'); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
+    anim(sel, 'boing'); Snd.play('boing'); Snd.buzz([15, 300, 25]); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
     say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(P.T(S.beings[sel]).boing)); });
   if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
-    anim(sel, 'squish'); fx_(sel, '💗', 3); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
+    anim(sel, 'squish'); fx_(sel, '💗', 3); Snd.play('hug'); Snd.buzz([40]); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
 }
 function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
   const b = S.beings[i]; b.taps = (b.taps || 0) + 1;
   if (b.napping) say(i, 'zzz…');
-  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); fx_(i, '🤫', 1); }
-  else { anim(i, 'squish'); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); else if (env.sea.costume && b.taps % 7 === 2) say(i, E.rand(SEASON_LINES.costume)); }
+  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); fx_(i, '🤫', 1); Snd.play('secret'); }
+  else { anim(i, 'squish'); Snd.play('tap'); Snd.buzz([6]); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); else if (env.sea.costume && b.taps % 7 === 2) say(i, E.rand(SEASON_LINES.costume)); }
   saveLocal();
 }
 
@@ -441,9 +444,10 @@ function autoWash() {
 /* ---------------- effects ---------------- */
 function fx_(i, ch, n) { const st = $('stage'), el = beingEl(i); if (!st || !el) return; const r = st.getBoundingClientRect(), br = el.getBoundingClientRect();
   for (let k = 0; k < n; k++) { const s = document.createElement('span'); s.className = 'fx'; s.textContent = ch; s.style.left = (br.left - r.left + br.width * (0.3 + Math.random() * 0.4)) + 'px'; s.style.top = (br.top - r.top + 10) + 'px'; s.style.animationDelay = (k * 0.18) + 's'; st.appendChild(s); setTimeout(() => s.remove(), 1900); } }
-function bubble(x, y) { const st = $('stage'); const s = document.createElement('span'); s.className = 'bubble'; s.style.left = (x - 7 + (Math.random() * 20 - 10)) + 'px'; s.style.top = (y - 7) + 'px'; st.appendChild(s); setTimeout(() => s.remove(), 1300); }
-function sparkle(i) { update(); fx_(i, '✨', 4); }
-function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
+let lastBubble = 0;
+function bubble(x, y) { if (Date.now() - lastBubble > 140) { lastBubble = Date.now(); Snd.play('bubble'); } const st = $('stage'); const s = document.createElement('span'); s.className = 'bubble'; s.style.left = (x - 7 + (Math.random() * 20 - 10)) + 'px'; s.style.top = (y - 7) + 'px'; st.appendChild(s); setTimeout(() => s.remove(), 1300); }
+function sparkle(i) { update(); fx_(i, '✨', 4); Snd.play('sparkle'); Snd.buzz([10, 40, 10]); }
+function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; if (S?.beings[i]) Snd.play('chirp', { pitch: Snd.voiceOf(S.beings[i].sp) }); el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
 function confetti() { const st = $('stage'); const cols = seasonal().costume ? ['#f08a24', '#6b3fa0', '#2b2230', '#f6cf4f'] : ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
   for (let k = 0; k < 40; k++) { const c = document.createElement('span'); c.className = 'confetti'; c.style.left = Math.random() * 100 + '%'; c.style.background = E.rand(cols); c.style.animationDelay = (Math.random() * 1.2) + 's'; st.appendChild(c); setTimeout(() => c.remove(), 4200); } }
 
@@ -466,6 +470,7 @@ function settingsHTML() {
       <label class="field">month<select id="s-bm"><option value="">–</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${S.bday && S.bday.m === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
       <button class="btn" id="s-save">save</button>
     </div>
+    ${Snd.canBuzz() ? `<label class="check"><input type="checkbox" id="s-haptics" ${Snd.haptics ? 'checked' : ''}> little vibrations when you feed, hug and boing</label>` : `<p class="hint">this device doesn\u2019t allow websites to vibrate, so it\u2019s sound only here.</p>`}
   </section>
 
   <section class="panel">
@@ -535,6 +540,7 @@ function setPlace(p) { E.setField(S, 'place', { name: p.name, region: p.region |
 
 function wireSettings() {
   on('s-save', () => { E.setField(S, 'owner', $('s-owner').value.trim() || S.owner); const d = $('s-bd').value, m = $('s-bm').value; E.setField(S, 'bday', d && m ? { d: +d, m: +m } : null); touch(); panelNote = 'saved.'; renderBurrow(); });
+  const hp = $('s-haptics'); if (hp) hp.onchange = () => Snd.setHaptics(hp.checked);
   const pf = $('place-form');
   if (pf) pf.onsubmit = async e => { e.preventDefault(); const q = $('place-q').value.trim(); if (!q) return;
     placeBusy = true; update();

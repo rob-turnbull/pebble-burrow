@@ -271,3 +271,6 @@ details.form[open]{gap:12px}
 .temper.sleepy{background:color-mix(in srgb,#7fb8d6 25%,var(--card))}
 .temper.curious{background:color-mix(in srgb,#86c46f 25%,var(--card))}
 .temper.bold{background:color-mix(in srgb,#eb9459 28%,var(--card))}
+.ghost.icon{padding:5px 10px;font-size:15px;line-height:1.2}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600}
+.check input{width:18px;height:18px;accent-color:var(--butter)}
