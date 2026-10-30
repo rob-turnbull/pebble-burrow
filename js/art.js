@@ -53,8 +53,13 @@ export function art(sp) {
   const t = S.top;
   const hat = `<g class="hat"><path d="M53 ${t + 2} L65 ${t - 26} L77 ${t + 2}Z" fill="#f2c94c"/><path d="M57 ${t - 6} L73 ${t - 8}" stroke="#e57fa8" stroke-width="3"/><circle cx="65" cy="${t - 27}" r="4.5" fill="#e57fa8"/></g>`;
   const scarf = `<g class="scarf"><path d="M36 ${cy + 12} q29 14 58 0 l0 8 q-29 14 -58 0z" fill="#d9534f"/><rect x="78" y="${cy + 16}" width="9" height="18" rx="3" fill="#c0443f"/></g>`;
+  // wearables, shown by CSS when the being's data-wear matches (or by the season)
+  const flowers = `<g class="w w-flowers">${[-16,-8,0,8,16].map((dx,i)=>`<circle cx="${65+dx}" cy="${t + 6 - Math.abs(dx)*0.12}" r="5" fill="${['#f28fae','#f6cf4f','#ffffff','#f6cf4f','#f28fae'][i]}"/><circle cx="${65+dx}" cy="${t + 6 - Math.abs(dx)*0.12}" r="1.8" fill="#e8a33d"/>`).join('')}</g>`;
+  const bow = `<g class="w w-bow"><path d="M88 ${t+6} l-10 -7 v14z M88 ${t+6} l10 -7 v14z" fill="#e57fa8"/><circle cx="88" cy="${t+6}" r="3.5" fill="#c9557f"/></g>`;
+  const star = `<g class="w w-star"><path d="M65 ${cy+10} l3.5 7 7.5 1 -5.5 5 1.5 7.5 -7 -3.8 -7 3.8 1.5 -7.5 -5.5 -5 7.5 -1z" fill="#f6cf4f" stroke="#d9a92a" stroke-width="1"/></g>`;
+  const pumpkin = `<g class="w w-pumpkin"><ellipse cx="65" cy="${t-2}" rx="17" ry="12" fill="#f08a24"/><path d="M58 ${t-12} q-4 10 0 20 M72 ${t-12} q4 10 0 20" stroke="#d06a10" stroke-width="2" fill="none"/><rect x="63" y="${t-19}" width="4" height="7" rx="1.5" fill="#5c7a2e"/><path d="M67 ${t-15} q8 -6 10 1" stroke="#5c7a2e" stroke-width="2" fill="none"/></g>`;
   const smudge = `<g class="smudge" fill="#8a6a4a" opacity=".45"><ellipse cx="44" cy="92" rx="7" ry="4"/><ellipse cx="88" cy="84" rx="5" ry="3"/><circle cx="74" cy="98" r="2.5"/></g>`;
-  return `<svg viewBox="0 0 130 120" aria-hidden="true">${back}${body}${cheeks}${eyes}${mouth}${front}${smudge}${scarf}${hat}</svg>`;
+  return `<svg viewBox="0 0 130 120" aria-hidden="true">${back}${body}${cheeks}${eyes}${mouth}${front}${smudge}${scarf.replace('class="scarf"','class="scarf w-scarf"')}${star}${bow}${flowers}${pumpkin}${hat.replace('class="hat"','class="hat w-party"')}</svg>`;
 }
 
 export function eggArt(sp) {

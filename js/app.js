@@ -1,10 +1,12 @@
-// Presentation + orchestration: rendering, actions, sky/weather loop, sync loop.
-import { SPECIES, CHEESES, MONTHS, WEATHER_LINES } from './data.js';
+// Presentation + orchestration: rendering, actions, sky/weather/season loop, sync loop.
+import { SPECIES, CHEESES, MONTHS, WEATHER_LINES, SEASON_LINES, WEARABLES, STAGES } from './data.js';
 import { art, eggArt } from './art.js';
 import * as E from './engine.js';
 import { phaseAt, sunFor, fmtClock } from './sky.js';
+import { seasonal, decorKey } from './seasons.js';
 import { fetchWeather, searchPlaces, locateMe, WeatherFX, kindIcon, KIND_LABEL, isCold, WEATHER_TTL } from './weather.js';
 import { GistSync } from './sync.js';
+import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
 
 /* ---------------- local persistence ---------------- */
 const K = { state: 'pebble-burrow', device: 'pebble-burrow-device', wx: 'pebble-burrow-weather', legacy: 'pebble-burrow-v1' };
@@ -14,59 +16,71 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 let S = E.migrate(ls.get(K.state) || ls.get(K.legacy));
-let D = ls.get(K.device) || { token: '', gistId: null, lastSync: 0, user: '' };   // this device only, never synced
-let W = ls.get(K.wx);                                                                  // weather cache, this device only
+let D = Object.assign({ token: '', gistId: null, lastSync: 0, user: '', dev: '' }, ls.get(K.device) || {});  // this device only
+if (!D.dev) D.dev = 'd' + E.uid();
+let W = ls.get(K.wx);                                                                                         // weather cache, this device only
 const saveLocal = () => ls.set(K.state, S);
 const saveDevice = () => ls.set(K.device, D);
+saveDevice();
+const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })();
 
 /* ---------------- ui state ---------------- */
 const app = document.getElementById('app');
-let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, confirmReset = false;
+let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
 let panelNote = '', placeResults = [], placeBusy = false, syncBusy = false, syncMsg = '', syncErr = false;
-let fx = null, env = { phase: 'day', t: 0.5, kind: null, cold: false }, lastVoiced = '';
+let helperNote = '', helperOk = null, nudgesOn = false;
+let fx = null, env = { phase: 'day', t: 0.5, kind: null, cold: false }, lastVoiced = '', lastDecor = '';
 let installEvt = null;
 
 const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const fmtAgo = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 6e4); if (m < 1) return 'just now'; if (m < 60) return m + 'm ago'; const h = Math.round(m / 60); if (h < 24) return h + 'h ago'; return Math.round(h / 24) + 'd ago'; };
+const fmtDay = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 const $ = id => document.getElementById(id);
 const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const busyTyping = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
 
-/* ---------------- sync orchestration ---------------- */
-let pushTimer = 0, dirty = false;
+/* ---------------- sync: pull → merge → push ---------------- */
+let syncTimer = 0, dirty = false, syncing = null;
 const syncer = () => D.token ? new GistSync(D.token, D.gistId) : null;
 
 function touch() {            // call after any change the person made
-  S.updatedAt = Date.now(); saveLocal(); dirty = true; schedulePush();
+  S.updatedAt = Date.now(); saveLocal(); dirty = true; scheduleSync();
 }
-function schedulePush(ms = 4000) { if (!D.token) return; clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, ms); }
+function scheduleSync(ms = 4000) { if (!D.token) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, ms); }
 
-async function pushNow() {
-  const g = syncer(); if (!g || !S) return;
-  syncBusy = true; paintSync();
-  try { D.gistId = await g.push(S); D.lastSync = Date.now(); dirty = false; syncErr = false; syncMsg = ''; }
-  catch (e) { syncErr = true; syncMsg = e.message; }
-  syncBusy = false; saveDevice(); paintSync();
+/**
+ * One round trip: read the gist, merge it with this device's save, write back if anything changed.
+ * Returns 'changed' when the merge brought something new into this device.
+ */
+function syncNow() {
+  if (syncing) return syncing;
+  syncing = (async () => {
+    const g = syncer(); if (!g) return 'off';
+    syncBusy = true; paintSync();
+    let out = 'same';
+    try {
+      const remote = E.migrate(await g.pull());
+      D.gistId = g.gistId;
+      const merged = E.merge(S, remote);
+      if (merged) {
+        E.catchUp(merged, Date.now());
+        const brought = !E.sameSave(merged, S);
+        if (!remote || !E.sameSave(merged, remote)) D.gistId = await g.push(merged);
+        if (brought) { S = merged; saveLocal(); out = 'changed'; }
+      } else out = 'empty';
+      dirty = false; D.lastSync = Date.now(); syncErr = false; syncMsg = '';
+    } catch (e) { syncErr = true; syncMsg = e.message; out = 'error'; }
+    syncBusy = false; saveDevice(); paintSync();
+    return out;
+  })().finally(() => { syncing = null; });
+  return syncing;
 }
 
-/** Pull the remote save and keep whichever is newer. Returns 'adopted' | 'pushed' | 'same' | 'empty'. */
-async function pullNow() {
-  const g = syncer(); if (!g) return 'off';
-  syncBusy = true; paintSync();
-  let out = 'same';
-  try {
-    const remote = E.migrate(await g.pull());
-    D.gistId = g.gistId;
-    if (remote && (!S || (remote.updatedAt || 0) > (S.updatedAt || 0))) {
-      S = remote; E.catchUp(S, Date.now()); saveLocal(); sel = 0; out = 'adopted';
-      setTimeout(() => refreshWeather(), 0);
-    } else if (S && (!remote || (S.updatedAt || 0) > (remote.updatedAt || 0))) {
-      D.gistId = await g.push(S); out = 'pushed';
-    } else if (!remote) out = 'empty';
-    D.lastSync = Date.now(); syncErr = false; syncMsg = '';
-  } catch (e) { syncErr = true; syncMsg = e.message; out = 'error'; }
-  syncBusy = false; saveDevice(); paintSync();
-  return out;
+async function syncAndRefresh() {
+  const r = await syncNow();
+  if (r === 'changed' && S) { sel = Math.min(sel, S.beings.length - 1); if (view === 'setup') renderBurrow(); else if (!busyTyping() && !washMode) renderBurrow(); refreshWeather(); }
+  return r;
 }
 
 function paintSync() {
@@ -77,13 +91,15 @@ function paintSync() {
   el.title = syncMsg || '';
 }
 
-/* ---------------- environment: sky + weather ---------------- */
+/* ---------------- environment: sky, weather, season ---------------- */
 function computeEnv(now = Date.now()) {
-  const sun = sunFor(now, S?.place, W && S?.place && W.for === `${S.place.lat},${S.place.lon}` ? W : null);
-  const { phase, t } = phaseAt(now, sun);
   const wx = S?.place && W && W.for === `${S.place.lat},${S.place.lon}` ? W : null;
-  return { phase, t, sun, wx, kind: wx ? wx.kind : 'clear', cold: isCold(wx, S?.units) };
+  const sun = sunFor(now, S?.place, wx);
+  const { phase, t } = phaseAt(now, sun);
+  const sea = seasonal(new Date(now), S?.place?.lat ?? 45);
+  return { phase, t, sun, wx, kind: wx ? wx.kind : 'clear', cold: isCold(wx, S?.units), sea };
 }
+const mult = () => E.envMultipliers({ phase: env.phase, kind: env.kind, cold: env.cold });
 
 async function refreshWeather(force = false) {
   if (!S?.place) return;
@@ -91,7 +107,7 @@ async function refreshWeather(force = false) {
   const fresh = W && W.for === key && W.units === S.units && Date.now() - W.fetchedAt < WEATHER_TTL;
   if (fresh && !force) return;
   try { W = await fetchWeather(S.place, S.units); ls.set(K.wx, W); applyEnv(); }
-  catch (e) { /* keep last known weather; offline is fine */ }
+  catch { /* keep last known weather; offline is fine */ }
 }
 
 function applyEnv() {
@@ -100,30 +116,59 @@ function applyEnv() {
   const st = $('stage'); if (!st) return;
   st.dataset.phase = env.phase;
   st.classList.toggle('cold', env.cold);
+  st.classList.toggle('costume', env.sea.costume);
+  st.dataset.season = env.sea.season;
   const orb = $('orb');
   if (orb) {
-    const t = env.t, night = env.phase === 'night';
-    orb.className = 'orb ' + (night ? 'moon' : env.phase);
-    orb.style.left = (6 + 80 * t) + '%';
-    orb.style.top = (58 - 46 * Math.sin(Math.PI * t)) + '%';
+    orb.className = 'orb ' + (env.phase === 'night' ? 'moon' : env.phase);
+    orb.style.left = (6 + 80 * env.t) + '%';
+    orb.style.top = (58 - 46 * Math.sin(Math.PI * env.t)) + '%';
   }
   fx?.set(env.kind, env.wx?.wind || 0);
+  paintDecor();
   const chip = $('wxchip');
   if (chip) {
-    const night = env.phase === 'night';
+    const night = env.phase === 'night', ev = env.sea.costume ? ' · 🎃' : env.sea.events.includes('halloween') ? ' · spooky week' : '';
     chip.innerHTML = env.wx
-      ? `<span>${kindIcon(env.kind, night)} ${env.wx.temp}°${S.units}</span><span class="muted">${esc(S.place.name)} · ${env.phase}</span>`
-      : `<span>${night ? '🌙' : '☀️'} ${env.phase}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
+      ? `<span>${kindIcon(env.kind, night)} ${env.wx.temp}°${S.units}</span><span class="muted">${esc(S.place.name)} · ${env.phase}${ev}</span>`
+      : `<span>${night ? '🌙' : '☀️'} ${env.phase}${ev}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
   }
-  // a being comments when the sky or weather changes
-  const voice = `${env.phase}|${env.kind}`;
+  earnEnvKeepsakes();
+  // a being comments when the sky, weather or season changes
+  const voice = `${env.phase}|${env.kind}|${env.sea.events.join(',')}`;
   if (lastVoiced && voice !== lastVoiced) {
-    const [p0, k0] = lastVoiced.split('|');
-    const line = env.kind !== k0 ? E.rand(WEATHER_LINES[env.kind] || ['']) : env.phase !== p0 ? E.rand(WEATHER_LINES[env.phase] || ['']) : '';
+    const [p0, k0, e0] = lastVoiced.split('|');
+    const line = env.kind !== k0 ? E.rand(WEATHER_LINES[env.kind] || ['']) : env.sea.events.join(',') !== e0 && env.sea.events[0] ? E.rand(SEASON_LINES[env.sea.events[0]] || ['']) : env.phase !== p0 ? E.rand(WEATHER_LINES[env.phase] || ['']) : '';
     const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1);
     if (line && awake.length) setTimeout(() => say(E.rand(awake), line, 3600), 800);
   }
   lastVoiced = voice;
+}
+
+/** Keepsakes that come from the world rather than from care. */
+function earnEnvKeepsakes() {
+  const now = Date.now(), y = new Date().getFullYear(); let got = false;
+  const firsts = { snow: ['❄️', 'first snow on the hill'], rain: ['🌧️', 'first rain on the hill'], storm: ['⛈️', 'braved a first storm together'] };
+  if (firsts[env.kind]) got = E.keepsake(S, 'wx:' + env.kind, firsts[env.kind][0], firsts[env.kind][1], now) || got;
+  if (env.sea.events.includes('halloween')) got = E.keepsake(S, 'halloween:' + y, '🎃', `halloween ${y} on the hill. the pumpkin hat is yours to keep`, now) || got;
+  if (E.isBirthday(S)) got = E.keepsake(S, 'bday:' + y, '🎂', `your birthday, ${y}. they knew. the party hat is yours to keep`, now) || got;
+  if (env.sea.events.includes('newyear')) got = E.keepsake(S, 'newyear:' + y, '🎆', `a new year together, ${y}`, now) || got;
+  if (got) touch();
+}
+
+function paintDecor() {
+  const layer = $('decor'); if (!layer) return;
+  const key = decorKey(env.sea, env.phase); if (key === lastDecor) return; lastDecor = key;
+  const night = env.phase === 'night' || env.phase === 'dusk';
+  let h = '';
+  if (env.sea.events.includes('halloween')) {
+    h += `<span class="pumpkin" style="left:9%;bottom:6px"></span><span class="pumpkin sm" style="left:28%;bottom:2px"></span><span class="pumpkin" style="right:6%;bottom:8px"></span>`;
+    if (night) h += `<span class="bat" style="top:18%;animation-delay:0s">🦇</span><span class="bat" style="top:30%;animation-delay:-4s;animation-duration:11s">🦇</span>`;
+  }
+  if (env.sea.events.includes('lights')) h += `<span class="lights"></span>`;
+  const drift = { autumn: ['🍂', '🍁'], spring: ['🌸', '🌸'] }[env.sea.season];
+  if (drift) for (let i = 0; i < 6; i++) h += `<span class="drift" style="left:${8 + i * 15}%;animation-delay:-${i * 2.3}s;animation-duration:${10 + (i % 3) * 3}s">${drift[i % 2]}</span>`;
+  layer.innerHTML = h;
 }
 
 /* ---------------- setup ---------------- */
@@ -162,8 +207,8 @@ function renderSetup() {
     note.textContent = 'checking the token…';
     try { const g = new GistSync(tok); D.user = await g.whoami(); D.token = tok; D.gistId = null; saveDevice(); }
     catch (e) { note.textContent = e.message; return; }
-    const r = await pullNow();
-    if (r === 'adopted') { renderBurrow(); say(0, 'we came all this way to see you!', 3600); }
+    const r = await syncNow();
+    if (r === 'changed') { renderBurrow(); refreshWeather(); say(0, 'we came all this way to see you!', 3600); }
     else note.textContent = r === 'error' ? syncMsg : `connected as ${D.user}, but there's no burrow saved yet. hatch one here and it will sync.`;
   });
   on('b-restore', () => restoreCode($('b-code').value, $('b-note')));
@@ -174,47 +219,49 @@ function keepForm(fn) {
 }
 function hatch() {
   const owner = ($('owner').value || '').trim() || 'my', d = $('bd').value, m = $('bm').value;
-  S = E.newBurrow({ owner, bday: d && m ? { d: +d, m: +m } : null, species: chosen });
+  S = E.newBurrow({ owner, bday: d && m ? { d: +d, m: +m } : null, species: chosen, tz: TZ });
   touch();
   app.innerHTML = `<header class="top"><div><h1>your eggs are warm</h1><p class="sub">listen… something's wiggling.</p></div></header>
     <div class="stage hatching"><div class="hill back"></div><div class="hill"></div>
     <div class="eggs">${chosen.map(k => `<div class="egg">${eggArt(k)}</div>`).join('')}</div></div>`;
   setTimeout(() => app.querySelectorAll('.egg').forEach(e => e.classList.add('pop')), 1700);
-  setTimeout(() => { renderBurrow(); say(0, 'hello! i already like you.'); setTimeout(() => say(1, 'is that cheese i smell?'), 900); }, 2300);
+  setTimeout(() => { view = 'burrow'; renderBurrow(); say(0, 'hello! i already like you.'); setTimeout(() => say(1, 'is that cheese i smell?'), 900); }, 2300);
 }
 function restoreCode(code, noteEl) {
   try {
     const n = E.migrate(E.decode(code)); if (!n) throw 0;
-    n.updatedAt = Date.now(); S = n; E.catchUp(S, Date.now()); touch(); sel = 0; panelNote = 'burrow restored.'; renderBurrow();
+    n.updatedAt = Date.now(); S = n; E.catchUp(S, Date.now()); touch(); sel = 0; panelNote = 'burrow restored.'; view = view === 'setup' ? 'burrow' : view; renderBurrow();
   } catch { const msg = "that code didn't work. paste the whole thing, first character to last."; if (noteEl) noteEl.textContent = msg; else { panelNote = msg; update(); } }
 }
 
 /* ---------------- burrow ---------------- */
 function renderBurrow() {
-  view = view === 'settings' ? 'settings' : 'burrow';
+  if (view === 'setup') view = 'burrow';
   const party = E.isBirthday(S);
+  lastDecor = '';
   app.innerHTML = `
   <header class="top">
     <div><h1>${esc(S.owner)}${/s$/i.test(S.owner) ? "'" : "'s"} burrow</h1>
-      <p class="sub">${S.beings.map(b => esc(b.name.split(' ')[0])).join(' & ')} · together since ${new Date(S.created).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p></div>
+      <p class="sub">${S.beings.map(b => esc(E.first(b))).join(' & ')} · together since ${fmtDay(S.created)}</p></div>
     <div class="row"><span id="syncpill" class="pill"></span><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
   </header>
   <div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
     <div class="sky-dim"></div><div id="orb" class="orb"></div>
     <div class="hill back"></div><div class="door"><i></i></div><div class="hill"></div>
+    <div class="decor" id="decor"></div>
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
-    ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : ''}
+    ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
     <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${art(b.sp)}<span class="shadow"></span></button>`).join('')}</div>
   </div>
   <div id="below"></div>`;
-  on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; renderBurrow(); });
+  on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
   on('wxchip', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   const stage = $('stage');
   fx = new WeatherFX(stage);
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
-  if (party && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
+  if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
   applyEnv(); paintSync(); update();
 }
 function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -228,6 +275,8 @@ function update() {
     el.classList.toggle('napping', b.napping);
     el.classList.toggle('glow', !!(b.glowUntil && b.glowUntil > now));
     el.classList.toggle('muddy', b.clean < 35);
+    el.dataset.wear = b.wear || '';
+    el.dataset.stage = E.stageOf(b);
     let z = el.querySelector('.zzz'); if (b.napping && !z) { z = document.createElement('span'); z.className = 'zzz'; z.textContent = 'z'; el.appendChild(z); } if (!b.napping && z) z.remove();
     let t = el.querySelector('.thought'); const hungry = !b.napping && b.full < 30;
     if (hungry && !t) { t = document.createElement('span'); t.className = 'thought'; t.textContent = '🧀'; el.appendChild(t); } if (!hungry && t) t.remove();
@@ -240,7 +289,7 @@ function update() {
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
     <div class="actions">
-      ${b.napping ? `<button class="act wake" id="a-wake"><span class="ic">✨</span>wake ${esc(b.name.split(' ')[0])}</button>` : ''}
+      ${b.napping ? `<button class="act wake" id="a-wake"><span class="ic">✨</span>wake ${esc(E.first(b))}</button>` : ''}
       <button class="act ${cheeseOpen ? 'on' : ''}" id="a-feed"><span class="ic">🧀</span>feed</button>
       <button class="act ${washMode ? 'on' : ''}" id="a-wash"><span class="ic">🧽</span>${washMode ? 'auto-wash' : 'wash'}</button>
       <button class="act" id="a-play"><span class="ic">🎈</span>boing</button>
@@ -249,22 +298,51 @@ function update() {
     ${cheeseOpen ? `<div class="cheeses">${CHEESES.map(c => `<button class="cheese" data-c="${c.id}">${c.label}</button>`).join('')}</div>` : ''}
   </section>
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
-  <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + x.feasts, 0)} feasts kept</span></div>
-    ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${esc(l.n.split(' ')[0])} had ${esc(l.c)}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
+  <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
+    ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
   </section>
+  ${albumHTML()}
   ${installHTML()}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
-  on('a-wake', () => { if (E.wake(b)) { sparkle(sel); say(sel, E.rand(["you're back! i was waiting, not worrying.", 'i dreamt about cheese. and you.', '*stretches* hello hello.'])); touch(); update(); } });
+  on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(["you're back! i was waiting, not worrying.", 'i dreamt about cheese. and you.', '*stretches* hello hello.'])); }));
   on('a-feed', () => { cheeseOpen = !cheeseOpen; washMode = false; update(); });
   on('a-wash', () => { if (washMode) autoWash(); else { washMode = true; cheeseOpen = false; showSponge(); update(); } });
   on('a-play', () => act('play')); on('a-hug', () => act('hug'));
   on('i-install', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; update(); });
+  on('album-more', () => { albumAll = !albumAll; update(); });
   below.querySelectorAll('.cheese').forEach(c => c.onclick = () => feed(c.dataset.c));
   below.querySelectorAll('.card').forEach(c => c.onclick = e => { if (e.target.closest('button,input')) return; sel = +c.dataset.i; update(); });
-  below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
-  const rf = $('rnf'); if (rf) rf.onsubmit = e => { e.preventDefault(); const v = $('rn').value.trim(); if (v) S.beings[renaming].name = v.slice(0, 32); renaming = -1; touch(); renderBurrow(); };
+  below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; wearing = -1; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
+  below.querySelectorAll('[data-wearing]').forEach(r => r.onclick = () => { wearing = wearing === +r.dataset.wearing ? -1 : +r.dataset.wearing; renaming = -1; update(); });
+  below.querySelectorAll('[data-wear]').forEach(w => w.onclick = () => { const i = +w.closest('.card').dataset.i, x = S.beings[i];
+    E.setWear(S, x, w.dataset.wear === x.wear ? '' : w.dataset.wear); touch(); update(); if (x.wear) say(i, E.rand(['do i look fancy?', 'i feel very important now', 'is it on straight?'])); });
+  const rf = $('rnf'); if (rf) rf.onsubmit = e => { e.preventDefault(); const v = $('rn').value.trim(); if (v) E.rename(S, S.beings[renaming], v.slice(0, 32)); renaming = -1; touch(); renderBurrow(); };
   on('rnx', () => { renaming = -1; update(); });
+}
+
+function cardHTML(b, i) {
+  const m = E.mood(b, { phase: env.phase });
+  const st = E.stageOf(b), nx = E.nextStage(b), unlocked = E.unlockedWear(S, b);
+  const bar = (k, lab) => `<div class="stat"><span>${lab}</span><div class="bar ${k}" role="meter" aria-label="${lab}" aria-valuenow="${Math.round(b[k])}" aria-valuemin="0" aria-valuemax="100"><i style="width:${b[k]}%"></i></div></div>`;
+  const stageLine = `<span class="stage-tag ${st}">${STAGES.find(x => x.id === st).label}</span><span class="meta">${nx ? `${nx.in} more tended day${nx.in === 1 ? '' : 's'} to ${nx.id}` : `tended ${b.days.length} days`}</span>`;
+  return `<article class="card ${i === sel ? 'sel' : ''}" data-i="${i}">
+    <div class="nm">${renaming === i ? `<form class="rename" id="rnf"><input id="rn" value="${esc(b.name)}" maxlength="32" aria-label="new name"><button class="ghost">save</button><button type="button" class="ghost" id="rnx">✕</button></form>` : `<h3>${esc(b.name)}</h3><span class="chip ${m.k}">${m.t}</span>`}</div>
+    <div class="row grow-row">${stageLine}</div>
+    ${bar('full', 'tummy')}${bar('clean', 'sparkle')}${bar('joy', 'joy')}
+    ${wearing === i ? `<div class="wears">${WEARABLES.map(w => unlocked[w.id]
+      ? `<button class="wear ${b.wear === w.id ? 'on' : ''}" data-wear="${w.id}">${w.label}</button>`
+      : `<span class="wear locked" title="${esc(w.hint)}">🔒 ${w.label}<small>${esc(w.hint)}</small></span>`).join('')}</div>` : ''}
+    <div class="row between"><span class="meta">${SPECIES[b.sp].label} · ${E.count(b, 'feasts')} feasts · ${E.count(b, 'hugs')} hugs · ${E.count(b, 'boings')} boings</span>
+      ${renaming === i ? '' : `<span class="row tight"><button class="linkbtn" data-wearing="${i}">${wearing === i ? 'done' : 'dress up'}</button><button class="linkbtn" data-rename="${i}">rename</button></span>`}</div>
+  </article>`;
+}
+
+function albumHTML() {
+  const items = [...S.album].reverse(), shown = albumAll ? items : items.slice(0, 5);
+  return `<section class="feasts album"><div class="row between"><h2>the album</h2><span class="hint">${S.album.length} keepsake${S.album.length === 1 ? '' : 's'}</span></div>
+    <ol>${shown.map(k => `<li><span><span class="emo" aria-hidden="true">${k.e}</span>${esc(k.text)}</span><span>${fmtDay(k.t)}</span></li>`).join('')}</ol>
+    ${items.length > 5 ? `<button class="linkbtn" id="album-more">${albumAll ? 'show fewer' : `show all ${items.length}`}</button>` : ''}</section>`;
 }
 
 function installHTML() {
@@ -272,45 +350,50 @@ function installHTML() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   return `<section class="install"><strong>keep it on your home screen</strong>
     ${installEvt ? `<button class="btn" id="i-install">install pebble burrow</button>`
-      : `<span class="hint">${ios ? 'in Safari, tap Share, then “Add to Home Screen”.' : 'in your browser menu, choose “Install app” or “Add to Home screen”.'} it opens full screen and works offline.</span>`}</section>`;
-}
-
-function cardHTML(b, i) {
-  const m = E.mood(b, { phase: env.phase });
-  const bar = (k, lab) => `<div class="stat"><span>${lab}</span><div class="bar ${k}" role="meter" aria-label="${lab}" aria-valuenow="${Math.round(b[k])}" aria-valuemin="0" aria-valuemax="100"><i style="width:${b[k]}%"></i></div></div>`;
-  return `<article class="card ${i === sel ? 'sel' : ''}" data-i="${i}">
-    <div class="nm">${renaming === i ? `<form class="rename" id="rnf"><input id="rn" value="${esc(b.name)}" maxlength="32" aria-label="new name"><button class="ghost">save</button><button type="button" class="ghost" id="rnx">✕</button></form>` : `<h3>${esc(b.name)}</h3><span class="chip ${m.k}">${m.t}</span>`}</div>
-    ${bar('full', 'tummy')}${bar('clean', 'sparkle')}${bar('joy', 'joy')}
-    <div class="row between"><span class="meta">${SPECIES[b.sp].label} · ${b.feasts} feasts · ${b.hugs} hugs · ${b.boings} boings</span>${renaming === i ? '' : `<button class="linkbtn" data-rename="${i}">rename</button>`}</div>
-  </article>`;
+      : `<span class="hint">${ios ? 'in Safari, tap Share, then “Add to Home Screen”.' : 'in your browser menu, choose “Install app” or “Add to Home screen”.'} it opens full screen, works offline, and can send nudges.</span>`}</section>`;
 }
 
 /* ---------------- actions ---------------- */
 const beingEl = i => document.querySelector(`.being[data-i="${i}"]`);
 function anim(i, cls) { const el = beingEl(i); if (!el) return; el.classList.remove('boing', 'squish', 'munch'); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 1000); }
+
+/** Run one care action: catch up first so stats are current, act, record growth, save, sync. */
+function care(i, fn, after) {
+  const now = Date.now();
+  E.catchUp(S, now, mult());
+  const res = fn(S, S.beings[i], now);
+  if (res === false) return false;
+  const grew = E.checkGrowth(S, now);
+  touch(); update();
+  after?.();
+  grew.forEach(({ b, stage }, k) => setTimeout(() => { const j = S.beings.indexOf(b); fx_(j, stage === 'grown' ? '🌳' : '🌱', 3); say(j, stage === 'grown' ? 'i’m all grown! (still small though)' : 'i think i grew a little!', 4200); }, 1400 + k * 600));
+  return true;
+}
 function feed(cid) {
   const b = S.beings[sel], c = CHEESES.find(x => x.id === cid);
-  if (b.napping) { E.wake(b); sparkle(sel); }
-  if (!E.feed(b, c)) { say(sel, 'so full. saving room for tomorrow.'); return; }
-  E.logFeast(S, b, cid === 'crumb' ? 'a tiny crumb' : cid);
-  anim(sel, 'munch'); fx_(sel, '🧀', 1);
-  setTimeout(() => { fx_(sel, '💛', 3); say(sel, E.rand(['nom nom nom', 'that was the best one yet', '*happy tummy noises*', 'more tomorrow? promise?'])); }, 1000);
-  cheeseOpen = false; touch(); update();
+  if (b.napping) care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => sparkle(sel));
+  if (b.full >= 96) { say(sel, 'so full. saving room for tomorrow.'); return; }
+  cheeseOpen = false;
+  care(sel, (s, x, now) => E.feed(s, x, c, now, D.dev), () => {
+    anim(sel, 'munch'); fx_(sel, '🧀', 1);
+    setTimeout(() => { fx_(sel, '💛', 3); say(sel, E.rand(['nom nom nom', 'that was the best one yet', '*happy tummy noises*', 'more tomorrow? promise?'])); }, 1000);
+  });
 }
 function act(kind) {
   const b = S.beings[sel];
   if (b.napping) { say(sel, 'zzz… (wake me first?)'); return; }
-  if (kind === 'play') { E.play(b); anim(sel, 'boing'); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
-    say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : E.rand(['boing!', 'again again!', 'i touched the sky a bit'])); }
-  if (kind === 'hug') { E.hug(b); anim(sel, 'squish'); fx_(sel, '💗', 3); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(['smoosh.', 'warm warm warm', 'i needed that'])); }
-  touch(); update();
+  if (kind === 'play') care(sel, (s, x, now) => E.play(s, x, now, D.dev), () => {
+    anim(sel, 'boing'); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
+    say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(['boing!', 'again again!', 'i touched the sky a bit'])); });
+  if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
+    anim(sel, 'squish'); fx_(sel, '💗', 3); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(['smoosh.', 'warm warm warm', 'i needed that'])); });
 }
 function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
   const b = S.beings[i]; b.taps = (b.taps || 0) + 1;
   if (b.napping) say(i, 'zzz…');
   else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); fx_(i, '🤫', 1); }
-  else { anim(i, 'squish'); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); }
+  else { anim(i, 'squish'); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); else if (env.sea.costume && b.taps % 7 === 2) say(i, E.rand(SEASON_LINES.costume)); }
   saveLocal();
 }
 
@@ -319,8 +402,11 @@ let spongeEl = null;
 function showSponge() { const st = $('stage'); if (!st || spongeEl) return; spongeEl = document.createElement('div'); spongeEl.className = 'sponge'; spongeEl.style.left = (st.clientWidth * 0.5) + 'px'; spongeEl.style.top = '40px'; st.appendChild(spongeEl); }
 function hideSponge() { spongeEl?.remove(); spongeEl = null; washMode = false; }
 function scrubOne(i, amt) {
-  const b = S.beings[i]; if (b.napping) { E.wake(b); sparkle(i); }
-  if (E.scrub(b, amt)) { hideSponge(); fx_(i, '✨', 3); say(i, E.rand(['squeaky!', 'i feel like a brand new pebble', 'sparkly sparkly'])); touch(); update(); }
+  const b = S.beings[i];
+  if (b.napping) care(i, (s, x, now) => E.wake(s, x, now, D.dev), () => sparkle(i));
+  if (E.scrub(S, b, amt, Date.now())) {
+    hideSponge(); E.checkGrowth(S); fx_(i, '✨', 3); say(i, E.rand(['squeaky!', 'i feel like a brand new pebble', 'sparkly sparkly'])); touch(); update();
+  }
 }
 function setupWash(stage) {
   let down = false, last = 0;
@@ -340,6 +426,7 @@ function setupWash(stage) {
 function autoWash() {
   const st = $('stage'), el = beingEl(sel); if (!st || !el) return; showSponge();
   const r = st.getBoundingClientRect(), br = el.getBoundingClientRect(), i = sel; let t = 0;
+  E.catchUp(S, Date.now(), mult());
   const iv = setInterval(() => { t++; if (!spongeEl) { clearInterval(iv); return; }
     const x = br.left - r.left + br.width * (0.5 + 0.32 * Math.sin(t / 3)), y = br.top - r.top + br.height * (0.45 + 0.18 * Math.cos(t / 5));
     spongeEl.style.left = x + 'px'; spongeEl.style.top = y + 'px'; bubble(x, y); scrubOne(i, 4);
@@ -352,12 +439,19 @@ function fx_(i, ch, n) { const st = $('stage'), el = beingEl(i); if (!st || !el)
 function bubble(x, y) { const st = $('stage'); const s = document.createElement('span'); s.className = 'bubble'; s.style.left = (x - 7 + (Math.random() * 20 - 10)) + 'px'; s.style.top = (y - 7) + 'px'; st.appendChild(s); setTimeout(() => s.remove(), 1300); }
 function sparkle(i) { update(); fx_(i, '✨', 4); }
 function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
-function confetti() { const st = $('stage'); const cols = ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
+function confetti() { const st = $('stage'); const cols = seasonal().costume ? ['#f08a24', '#6b3fa0', '#2b2230', '#f6cf4f'] : ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
   for (let k = 0; k < 40; k++) { const c = document.createElement('span'); c.className = 'confetti'; c.style.left = Math.random() * 100 + '%'; c.style.background = E.rand(cols); c.style.animationDelay = (Math.random() * 1.2) + 's'; st.appendChild(c); setTimeout(() => c.remove(), 4200); } }
 
 /* ---------------- settings ---------------- */
+async function checkHelper() {
+  const h = parseHelper(S.helper); if (!h) { helperOk = null; return; }
+  try { await helperStatus(h); helperOk = true; } catch (e) { helperOk = false; helperNote = e.message; }
+  try { nudgesOn = !!(await currentSubscription()); } catch { nudgesOn = false; }
+  if (view === 'settings' && !busyTyping()) update();
+}
+
 function settingsHTML() {
-  const sun = env.sun || {};
+  const sun = env.sun || {}, h = parseHelper(S.helper), sup = pushSupport();
   return `<div class="stack">
   <section class="panel">
     <h2>you</h2>
@@ -387,7 +481,7 @@ function settingsHTML() {
     <h2>sync across devices</h2>
     ${D.token ? `<p class="place-now">connected${D.user ? ' as <strong>' + esc(D.user) + '</strong>' : ''} · last synced ${fmtAgo(D.lastSync)}${syncErr ? ` · <span class="danger">${esc(syncMsg)}</span>` : ''}</p>
       <div class="row"><button class="btn" id="sy-now">sync now</button><button class="btn" id="sy-off">disconnect this device</button></div>
-      <p class="hint">on your other device, open pebble burrow, choose “already have a burrow?”, and paste the same token.</p>`
+      <p class="hint">changes from every device are merged, so care done on two devices at once all counts. on another device, choose “already have a burrow?” and paste the same token.</p>`
     : `<p class="hint">your burrow is saved in a secret gist on your GitHub account, so any device with the same token gets the same beings. one-time setup, about a minute:</p>
       <ol class="steps">
         <li>open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → new fine-grained token</a></li>
@@ -396,6 +490,24 @@ function settingsHTML() {
       </ol>
       <div class="row"><label class="field grow">GitHub token<input id="sy-token" type="password" placeholder="github_pat_…" autocomplete="off"></label><button class="btn" id="sy-connect">connect</button></div>
       <p class="hint">the token stays on this device. it is never put into the save or sent anywhere except GitHub.</p>`}
+  </section>
+
+  <section class="panel">
+    <h2>nudges & AI visitor</h2>
+    ${h ? `<p class="place-now">helper ${helperOk === true ? '<span class="okdot">connected</span>' : helperOk === false ? '<span class="danger">not answering</span>' : 'checking…'}</p>
+      <div class="row">
+        ${!sup.ok ? `<p class="hint">${esc(sup.why)}</p>` : nudgesOn
+          ? `<button class="btn" id="n-test">send a test nudge</button><button class="btn" id="n-off">turn off nudges on this device</button>`
+          : `<button class="btn" id="n-on">🔔 turn on nudges here</button>`}
+      </div>
+      <p class="hint">up to 4 gentle nudges a day, never between 10pm and 7am, and never while you’re already tending them.</p>
+      <div class="field">AI visitor address (custom connector)
+        <div class="row"><input id="n-mcp" readonly value="${esc(h.mcp)}"><button class="btn" id="n-copy">copy</button></div></div>
+      <p class="hint">in claude.ai: settings → connectors → add custom connector, name it “Pebble Burrow”, paste this address. your Claude can then peek, feed, hug and wake. it signs the feast book when it visits. keep this address private, it works like a key.</p>
+      <div class="row"><button class="linkbtn" id="n-forget">use a different helper</button></div>`
+    : `<p class="hint">nudges and the AI visitor run on a small free helper in your own Cloudflare account. the repo’s <strong>worker/README.md</strong> sets it up in three commands. it prints a <em>helper link</em>; paste it here once and every synced device gets it.</p>
+      <div class="row"><label class="field grow">helper link<input id="n-link" placeholder="https://pebble-burrow-helper.….workers.dev/k/…" autocomplete="off"></label><button class="btn" id="n-save">connect</button></div>`}
+    ${helperNote ? `<p class="note" role="status">${esc(helperNote)}</p>` : ''}
   </section>
 
   <section class="panel">
@@ -414,41 +526,57 @@ function settingsHTML() {
   </div>`;
 }
 
-function setPlace(p) { S.place = { name: p.name, region: p.region || '', lat: p.lat, lon: p.lon }; placeResults = []; touch(); refreshWeather(true).then(() => { applyEnv(); update(); }); applyEnv(); update(); }
+function setPlace(p) { E.setField(S, 'place', { name: p.name, region: p.region || '', lat: p.lat, lon: p.lon }); placeResults = []; touch(); refreshWeather(true).then(() => { applyEnv(); update(); }); applyEnv(); update(); }
 
 function wireSettings() {
-  on('s-save', () => { S.owner = $('s-owner').value.trim() || S.owner; const d = $('s-bd').value, m = $('s-bm').value; S.bday = d && m ? { d: +d, m: +m } : null; touch(); panelNote = 'saved.'; renderBurrow(); });
+  on('s-save', () => { E.setField(S, 'owner', $('s-owner').value.trim() || S.owner); const d = $('s-bd').value, m = $('s-bm').value; E.setField(S, 'bday', d && m ? { d: +d, m: +m } : null); touch(); panelNote = 'saved.'; renderBurrow(); });
   const pf = $('place-form');
   if (pf) pf.onsubmit = async e => { e.preventDefault(); const q = $('place-q').value.trim(); if (!q) return;
     placeBusy = true; update();
     try { placeResults = await searchPlaces(q); panelNote = placeResults.length ? '' : `no town called “${q}” found. try adding a state or country.`; }
-    catch (err) { panelNote = 'place search needs a connection. try again when you’re online.'; }
+    catch { panelNote = 'place search needs a connection. try again when you’re online.'; }
     placeBusy = false; update(); };
   on('place-me', async () => { placeBusy = true; update();
     try { setPlace(await locateMe()); panelNote = ''; } catch (err) { panelNote = err.message + '. you can search for your town instead.'; }
     placeBusy = false; update(); });
   document.querySelectorAll('.result').forEach(b => b.onclick = () => setPlace(placeResults[+b.dataset.p]));
-  document.querySelectorAll('.seg [data-u]').forEach(b => b.onclick = () => { S.units = b.dataset.u; touch(); refreshWeather(true).then(() => update()); update(); });
-  on('place-clear', () => { S.place = null; W = null; ls.del(K.wx); touch(); applyEnv(); update(); });
+  document.querySelectorAll('.seg [data-u]').forEach(b => b.onclick = () => { E.setField(S, 'units', b.dataset.u); touch(); refreshWeather(true).then(() => update()); update(); });
+  on('place-clear', () => { E.setField(S, 'place', null); W = null; ls.del(K.wx); touch(); applyEnv(); update(); });
 
   on('sy-connect', async () => { const tok = $('sy-token').value.trim(); if (!tok) return;
     panelNote = 'checking the token…'; update();
     try { const g = new GistSync(tok); D.user = await g.whoami(); D.token = tok; D.gistId = null; saveDevice(); }
     catch (e) { panelNote = e.message; update(); return; }
-    const r = await pullNow();
-    panelNote = r === 'adopted' ? 'found your burrow from another device and loaded it.' : r === 'error' ? syncMsg : 'connected. this burrow now syncs.';
-    r === 'adopted' ? renderBurrow() : update(); });
-  on('sy-now', async () => { const r = await pullNow(); panelNote = r === 'adopted' ? 'loaded newer changes from another device.' : r === 'error' ? syncMsg : 'all synced.'; r === 'adopted' ? renderBurrow() : update(); });
-  on('sy-off', () => { D = { token: '', gistId: null, lastSync: 0, user: '' }; saveDevice(); panelNote = 'this device is disconnected. your saved gist is untouched.'; paintSync(); update(); });
+    const r = await syncNow();
+    panelNote = r === 'changed' ? 'merged with your burrow from another device.' : r === 'error' ? syncMsg : 'connected. this burrow now syncs.';
+    r === 'changed' ? renderBurrow() : update(); });
+  on('sy-now', async () => { const r = await syncNow(); panelNote = r === 'changed' ? 'brought in changes from another device.' : r === 'error' ? syncMsg : 'all synced.'; r === 'changed' ? renderBurrow() : update(); });
+  on('sy-off', () => { D = { token: '', gistId: null, lastSync: 0, user: '', dev: D.dev }; saveDevice(); panelNote = 'this device is disconnected. your saved gist is untouched.'; paintSync(); update(); });
 
-  on('s-copy', () => { const ta = $('s-code');
-    const done = () => { panelNote = 'code copied.'; update(); };
-    if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(done).catch(() => { ta.select(); });
-    else ta.select(); });
+  on('n-save', async () => { const link = $('n-link').value.trim(), h = parseHelper(link);
+    if (!h) { helperNote = 'that doesn’t look like a helper link. it ends in /k/ followed by a long key.'; update(); return; }
+    helperNote = 'checking the helper…'; update();
+    try { await helperStatus(h); } catch (e) { helperNote = e.message; update(); return; }
+    E.setField(S, 'helper', link); touch(); helperOk = true; helperNote = 'helper connected. turn on nudges on each device you want them on.'; update(); });
+  on('n-on', async () => { const h = parseHelper(S.helper);
+    helperNote = 'asking for permission…'; update();
+    try { await enableNudges(h, navigator.userAgent.slice(0, 80)); nudgesOn = true; helperNote = 'nudges are on for this device.'; }
+    catch (e) { helperNote = e.message; }
+    update(); });
+  on('n-off', async () => { await disableNudges(parseHelper(S.helper)); nudgesOn = false; helperNote = 'nudges are off for this device.'; update(); });
+  on('n-test', async () => { try { const r = await testNudge(parseHelper(S.helper)); helperNote = r.sent ? 'sent. it should arrive in a few seconds.' : 'the helper has no devices to nudge yet.'; } catch (e) { helperNote = e.message; } update(); });
+  on('n-copy', () => copyField('n-mcp', 'address copied.', m => helperNote = m));
+  on('n-forget', async () => { if (nudgesOn) await disableNudges(parseHelper(S.helper)).catch(() => {}); E.setField(S, 'helper', ''); touch(); helperOk = null; nudgesOn = false; helperNote = ''; update(); });
+
+  on('s-copy', () => copyField('s-code', 'code copied.', m => panelNote = m));
   on('s-restore', () => restoreCode($('s-in').value, null));
   on('s-reset', () => { confirmReset = true; update(); });
   on('s-no', () => { confirmReset = false; update(); });
-  on('s-yes', () => { S = null; ls.del(K.state); ls.del(K.legacy); chosen = []; confirmReset = false; view = 'burrow'; renderSetup(); });
+  on('s-yes', () => { S = null; ls.del(K.state); ls.del(K.legacy); chosen = []; confirmReset = false; view = 'setup'; renderSetup(); });
+}
+function copyField(id, msg, set) {
+  const el = $(id); const done = () => { set(msg); update(); };
+  if (navigator.clipboard) navigator.clipboard.writeText(el.value).then(done).catch(() => el.select()); else el.select();
 }
 
 /* ---------------- boot & loops ---------------- */
@@ -456,31 +584,35 @@ function tick() {
   if (!S || view === 'setup') return;
   const before = S.beings.map(b => b.napping);
   env = computeEnv();
-  E.catchUp(S, Date.now(), E.envMultipliers({ phase: env.phase, kind: env.kind, cold: env.cold }));
+  E.catchUp(S, Date.now(), mult());
   saveLocal();
   applyEnv();
-  if (!washMode && renaming < 0 && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') update();
+  if (!washMode && renaming < 0 && !busyTyping()) update();
   S.beings.forEach((b, i) => { if (b.napping && !before[i]) say(i, 'getting sleepy… just a little nap.'); });
 }
 
 async function boot() {
   if (S) {
+    if (TZ && S.tz !== TZ) { E.setField(S, 'tz', TZ); touch(); }
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();
     if (hours >= 1) { const d = hours >= 48 ? Math.round(hours / 24) + ' days' : Math.round(hours) + ' hours';
       setTimeout(() => say(0, napped ? `you were gone ${d}. we napped and kept your spot warm.` : `you're back! it's been ${d}.`, 4200), 500); }
+    const visit = S.log.find(l => l.by && l.t > Date.now() - hours * 36e5);
+    if (visit && hours >= 0.25) setTimeout(() => say(1 % S.beings.length, `${visit.by} came by while you were away!`, 4200), 2200);
   } else renderSetup();
 
-  if (D.token) { const r = await pullNow(); if (r === 'adopted') { renderBurrow(); say(0, 'caught up from your other device!', 3200); } }
+  if (D.token) { const r = await syncAndRefresh(); if (r === 'changed' && view !== 'setup') say(0, 'caught up from your other device!', 3200); }
   refreshWeather();
 
   setInterval(tick, 30e3);
   setInterval(() => refreshWeather(), 10 * 60e3);
+  setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') { if (dirty) pushNow(); return; }
+    if (document.visibilityState === 'hidden') { if (dirty) syncNow(); return; }
     if (!S) return; tick(); refreshWeather();
-    if (D.token && Date.now() - (D.lastSync || 0) > 60e3) { const r = await pullNow(); if (r === 'adopted') renderBurrow(); }
+    if (D.token && Date.now() - (D.lastSync || 0) > 60e3) syncAndRefresh();
   });
-  addEventListener('online', () => { if (dirty) pushNow(); refreshWeather(); });
+  addEventListener('online', () => { if (dirty) syncNow(); refreshWeather(); });
 
   try { navigator.storage?.persist?.(); } catch {}
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('./sw.js').catch(() => {});

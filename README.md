@@ -1,6 +1,6 @@
 # Pebble Burrow
 
-Two little beings on a hill that follows your real sky and weather. Feed them cheese, wash them, boing them, hug them. **Nothing here ever dies**: neglect only means a nap, and coming back makes them glow.
+Two little beings on a hill that follows your real sky, weather and seasons. Feed them cheese, wash them, boing them, hug them, dress them up. They grow up with you. **Nothing here ever dies**: neglect only means a nap, and coming back makes them glow.
 
 A personal, clean-room recreation of the gentle virtual-pet idea behind tummygotcheese.com. All art, names and code are original.
 
@@ -43,8 +43,9 @@ Your burrow is saved in the browser first. To carry it between devices, it also 
 
 How it behaves:
 
-- Every change you make pushes a few seconds later, and again when you leave the app.
-- Opening the app (or coming back to it after a minute) pulls. The newer save wins.
+- Every change you make syncs a few seconds later, again when you leave the app, and every 5 minutes while it's open.
+- Each sync reads the gist, **merges** it with this device, and writes back. Care on two devices at the same time all counts: feasts, hugs and boings are counted per device, the feast book and album are combined, and the freshest care wins the stats. Renames and settings keep the newest change.
+- "Start a new burrow" replaces the old one on every device.
 - The token never leaves the device except to talk to GitHub, and it isn't written into the save.
 - The gist is a file named `pebble-burrow.json`. Don't rename it; that's how other devices find it.
 - When the token expires, sync pauses (the pill turns red). Make a new token and connect again; your gist is kept.
@@ -59,6 +60,20 @@ No GitHub? The **backup code** in settings copies the whole burrow as text. Past
 - Location is rounded to about 1 km before it's saved.
 
 Gameplay ties-ins: at night everything decays at half speed. Rain muddies them 1.5× faster. Snow keeps their joy up, storms make them want hugs, and cold makes tummies rumble.
+
+## Growing up, dressing up, the album
+
+- Beings grow by **days you tended them** (any feed, wash, boing, hug or wake counts that day): *sprout* → *young* at 7 days → *grown* at 30. Merged across devices, so days are never lost.
+- **Dress up** on each card. Wearables unlock as they grow and as you care: flower crown (young), cosy scarf (10 feasts), big bow (25 hugs), star badge (grown), pumpkin hat (any Halloween), party hat (your birthday).
+- **The album** keeps moments: hatching, first feasts, first rain, snow and storm, growing up, Halloweens, birthdays, a new year, and your AI friend's first visit.
+
+## Seasons
+
+Hemisphere-aware. Autumn leaves and a golden hill, spring petals, winter lights on the door (Dec 1 – Jan 6), and Halloween from **Oct 24 to Nov 1**: pumpkins that glow at night, bats after dusk, and costumes on the 31st.
+
+## Nudges & AI visitor
+
+Optional, and runs in your own Cloudflare account. See **[worker/README.md](worker/README.md)**: three commands, then paste one link into settings.
 
 ## Updating
 
@@ -77,7 +92,10 @@ js/engine.js          pure state engine (decay, naps, waking, migration)
 js/sky.js             sunrise/sunset maths and day phases
 js/weather.js         Open-Meteo weather, place search, rain/snow effects
 js/sync.js            GitHub Gist sync
+js/seasons.js         seasonal calendar
+js/helper.js          talks to your Cloudflare helper (nudges)
 js/app.js             rendering, actions, loops
+worker/               the optional Cloudflare helper (nudges + AI visitor)
 tests/                node --test unit tests
 ```
 
@@ -87,7 +105,7 @@ tests/                node --test unit tests
 npm test     # or: node --test tests/*.test.mjs
 ```
 
-14 tests cover the nothing-dies rule, napping, waking, weather/night multipliers, birthday detection, backup codes, v1→v2 migration, last-writer-wins sync, sunrise/sunset accuracy (Hillsboro, Oct 30) and polar night.
+38 tests cover the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
 
 ## Local preview
 

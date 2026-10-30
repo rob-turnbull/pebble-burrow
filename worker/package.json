@@ -1,0 +1,10 @@
+{
+  "name": "pebble-burrow-helper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node setup.mjs",
+    "deploy": "npx wrangler deploy",
+    "logs": "npx wrangler tail"
+  }
+}

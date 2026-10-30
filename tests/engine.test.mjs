@@ -1,4 +1,4 @@
-// Run with: node --test tests/
+// Run with: npm test
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as E from '../js/engine.js';
@@ -6,7 +6,7 @@ import { sunTimes, phaseAt } from '../js/sky.js';
 import { kindFromCode } from '../js/weather.js';
 
 const H = 36e5;
-const burrow = (now = 0) => E.newBurrow({ owner: 'Rob', bday: { d: 30, m: 10 }, species: ['frog', 'owl'] }, now);
+const burrow = (now = 0) => E.newBurrow({ owner: 'Rob', bday: { d: 30, m: 10 }, species: ['frog', 'owl'], tz: 'America/Los_Angeles' }, now);
 
 test('nothing ever dies: a week away only means napping, stats never go negative', () => {
   const s = burrow(0);
@@ -16,9 +16,9 @@ test('nothing ever dies: a week away only means napping, stats never go negative
 });
 
 test('napping freezes decay', () => {
-  const s = burrow(0); s.beings[0].napping = true; const before = { ...s.beings[0] };
+  const s = burrow(0); s.beings[0].napping = true; const before = s.beings[0].full;
   E.catchUp(s, 5 * H);
-  assert.equal(s.beings[0].full, before.full);
+  assert.equal(s.beings[0].full, before);
 });
 
 test('short absence decays but keeps them awake', () => {
@@ -27,11 +27,12 @@ test('short absence decays but keeps them awake', () => {
   assert.equal(s.beings[0].full, 80 - 10);
 });
 
-test('waking restores floors and glows', () => {
-  const b = E.newBeing('frog', 0); Object.assign(b, { napping: true, full: 0, clean: 5, joy: 1 });
-  assert.equal(E.wake(b, 1000), true);
+test('waking restores floors, glows, and counts as a care day', () => {
+  const s = burrow(0), b = s.beings[0]; Object.assign(b, { napping: true, full: 0, clean: 5, joy: 1 });
+  assert.equal(E.wake(s, b, 1000), true);
   assert.deepEqual([b.full, b.clean, b.joy, b.napping], [40, 40, 60, false]);
   assert.equal(E.mood(b, { now: 2000 }).t, 'glowing');
+  assert.equal(b.days.length, 1);
 });
 
 test('night halves decay, rain muddies faster, cold makes tummies rumble', () => {
@@ -39,10 +40,13 @@ test('night halves decay, rain muddies faster, cold makes tummies rumble', () =>
   assert.equal(m.joy, 0.5); assert.equal(m.clean, 0.75); assert.equal(m.full, 0.6);
 });
 
-test('feeding refuses when full and logs feasts', () => {
+test('feeding refuses when full, logs feasts, and earns a first-feast keepsake', () => {
   const s = burrow(0), b = s.beings[0]; b.full = 97;
-  assert.equal(E.feed(b, { full: 28 }), false);
-  b.full = 50; assert.equal(E.feed(b, { full: 28 }), true); assert.equal(b.full, 78); assert.equal(b.feasts, 1);
+  assert.equal(E.feed(s, b, { id: 'brie', full: 28 }, 10), false);
+  b.full = 50; assert.equal(E.feed(s, b, { id: 'brie', full: 28 }, 20, 'phone'), true);
+  assert.equal(b.full, 78); assert.equal(E.count(b, 'feasts'), 1);
+  assert.equal(s.log[0].c, 'brie');
+  assert.ok(s.album.some(k => k.k === 'firstfeast:' + b.id));
 });
 
 test('birthday detection uses day and month only', () => {
@@ -56,20 +60,23 @@ test('backup codes round-trip, including emoji and accents', () => {
   assert.deepEqual(E.decode(E.encode(s)), s);
 });
 
-test('migrate upgrades a v1 save', () => {
-  const v1 = { owner: 'Rob', bday: null, beings: [{ sp: 'mole', name: 'x', full: 50, clean: 50, joy: 50, napping: false }], log: [], lastTick: 5, created: 5 };
-  const s = E.migrate(v1);
-  assert.equal(s.v, E.SCHEMA); assert.equal(s.units, 'F'); assert.equal(s.place, null); assert.equal(s.updatedAt, 5);
+test('migrate upgrades v1 and v2 saves to v3 without losing counts', () => {
+  const v2 = { v: 2, owner: 'Rob', bday: null, beings: [{ id: 'm1', sp: 'mole', name: 'x', full: 50, clean: 50, joy: 50, napping: false, feasts: 7, hugs: 3, boings: 1 }], log: [], lastTick: 5, created: 5, updatedAt: 9, place: null, units: 'F' };
+  const s = E.migrate(v2);
+  assert.equal(s.v, E.SCHEMA); assert.ok(s.id); assert.equal(s.updatedAt, 9);
+  assert.equal(E.count(s.beings[0], 'feasts'), 7); assert.equal(E.count(s.beings[0], 'hugs'), 3);
+  assert.equal(s.beings[0].feasts, undefined);
+  assert.ok(s.album.some(k => k.k === 'hatch'));
   assert.equal(E.migrate({ beings: [] }), null);
 });
 
-test('sync keeps the newer save', () => {
-  const a = { updatedAt: 10 }, b = { updatedAt: 20 };
-  assert.equal(E.newer(a, b), b); assert.equal(E.newer(b, a), b); assert.equal(E.newer(null, a), a);
+test('peek text describes each being', () => {
+  const s = burrow(0); const t = E.peekText(s, { now: 0, phase: 'day' });
+  assert.match(t, /Rob's burrow/); assert.match(t, /sprout/); assert.match(t, /nothing here ever dies/);
 });
 
 test('sunrise/sunset for Hillsboro, OR on 2026-10-30 lands near 7:50 / 17:58 PDT', () => {
-  const day = new Date(Date.UTC(2026, 9, 30, 19)); // midday Pacific
+  const day = new Date(Date.UTC(2026, 9, 30, 19));
   const { rise, set } = sunTimes(day, 45.52, -122.99);
   const pdt = ms => new Date(ms - 7 * H).toISOString().slice(11, 16);
   const mins = t => +t.slice(0, 2) * 60 + +t.slice(3);

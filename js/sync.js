@@ -8,14 +8,14 @@ const DESC = 'Pebble Burrow save (do not rename the file)';
 export class SyncError extends Error { constructor(msg, code) { super(msg); this.code = code; } }
 
 export class GistSync {
-  constructor(token, gistId = null) { this.token = token.trim(); this.gistId = gistId; }
+  constructor(token, gistId = null, extraHeaders = {}) { this.token = token.trim(); this.gistId = gistId; this.extra = extraHeaders; }
 
   async req(path, opts = {}) {
     let r;
     try {
       r = await fetch(API + path, { ...opts, headers: {
         Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token}`,
-        'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) } });
+        'X-GitHub-Api-Version': '2022-11-28', ...this.extra, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) } });
     } catch (e) { throw new SyncError('offline, will sync when you’re back online', 'offline'); }
     if (r.status === 401) throw new SyncError('GitHub rejected the token. Make a new one with gist access.', 'auth');
     if (r.status === 403) throw new SyncError('this token can’t use gists. Give it the Gists read & write permission.', 'scope');
@@ -44,7 +44,7 @@ export class GistSync {
     try { g = await this.req(`/gists/${this.gistId}`); }
     catch (e) { if (e.code === 'missing') { this.gistId = null; return null; } throw e; }
     const f = g.files[FILE]; if (!f) return null;
-    const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+    const text = f.truncated ? await (await fetch(f.raw_url, { headers: this.extra })).text() : f.content;
     try { return JSON.parse(text); } catch { return null; }
   }
 

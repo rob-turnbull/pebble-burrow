@@ -36,3 +36,30 @@ export const WEATHER_LINES = {
   dusk:    ['the sky is going pink', 'almost bedtime for the hill'],
   cold:    ['brr. cold makes my tummy rumble']
 };
+
+// Growth: stages come from how many different days a being was tended.
+export const STAGES = [
+  { id: 'sprout', label: 'sprout', from: 0 },
+  { id: 'young',  label: 'young',  from: 7 },
+  { id: 'grown',  label: 'grown',  from: 30 }
+];
+
+// Wearables. `unlock` is checked by engine.unlockedWear(); `hint` shows while locked.
+export const WEARABLES = [
+  { id: 'flowers', label: 'flower crown', hint: 'unlocks when they grow young' },
+  { id: 'scarf',   label: 'cosy scarf',   hint: 'unlocks after 10 feasts' },
+  { id: 'bow',     label: 'big bow',      hint: 'unlocks after 25 hugs' },
+  { id: 'star',    label: 'star badge',   hint: 'unlocks when they’re grown' },
+  { id: 'pumpkin', label: 'pumpkin hat',  hint: 'unlocks at halloween' },
+  { id: 'party',   label: 'party hat',    hint: 'unlocks on your birthday' }
+];
+
+export const SEASON_LINES = {
+  halloween: ['the pumpkins are watching. nicely.', 'boo! (did it work?)', 'i want to be a ghost but i keep giggling'],
+  costume:   ['HAPPY HALLOWEEN. do you like my hat?', 'trick or cheese!'],
+  autumn:    ['crunchy leaves are the best leaves', 'i caught a leaf. it was a slow one'],
+  winter:    ['the lights make the door look cosy', 'winter is just a long nap season'],
+  spring:    ['the petals are tickling my nose', 'everything smells green'],
+  summer:    ['warm grass, big naps', 'the hill is all buzzy'],
+  newyear:   ['new year! same burrow. best burrow.']
+};

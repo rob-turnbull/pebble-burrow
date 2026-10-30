@@ -1,0 +1,13 @@
+# Pebble Burrow helper. `node setup.mjs` fills in the KV namespace and secrets for you.
+name = "pebble-burrow-helper"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# check every 30 minutes whether anyone needs a nudge (never 10pm–7am in your time zone)
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+APP_URL = "https://rob-turnbull.github.io/pebble-burrow/"
+APP_ORIGIN = "https://rob-turnbull.github.io"
+VISITOR_NAME = "Claude"
