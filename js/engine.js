@@ -53,6 +53,7 @@ export function migrate(s) {
   TOP_FIELDS.forEach(f => { if (typeof s.at[f] !== 'number') s.at[f] = 0; });
   s.log = Array.isArray(s.log) ? s.log : [];
   s.album = Array.isArray(s.album) ? s.album : [];
+  s.wxDays = s.wxDays || {};
   s.beings.forEach(b => {
     b.id = b.id || uid();
     b.nameAt = b.nameAt || 0;
@@ -73,7 +74,7 @@ export function migrate(s) {
 
 /* ---------------- counters ---------------- */
 export const count = (b, k) => Object.values(b.cnt[k] || {}).reduce((a, n) => a + n, 0);
-function bump(b, k, dev) { b.cnt[k][dev] = (b.cnt[k][dev] || 0) + 1; }
+function bump(b, k, dev) { b.cnt[k] = b.cnt[k] || {}; b.cnt[k][dev] = (b.cnt[k][dev] || 0) + 1; }
 
 /* ---------------- time ---------------- */
 export function envMultipliers({ phase = 'day', kind = 'clear', cold = false } = {}) {
@@ -111,8 +112,9 @@ export function catchUp(s, now = Date.now(), mult) {
 
 /* ---------------- care actions (call catchUp first) ---------------- */
 // Every action stamps statsAt so the freshest care wins a merge, and marks a care day for growth.
-function cared(s, b, now) {
+function cared(s, b, now, dev) {
   b.statsAt = now; b.tick = Math.max(b.tick, now);
+  if (dev && s.wxNow && now - s.wxNow.t < 2 * H) bump(b, 'wx:' + s.wxNow.kind, dev);
   const d = localDate(now, s.tz);
   if (!b.days.includes(d)) { b.days.push(d); b.days.sort(); }
   s.updatedAt = Math.max(s.updatedAt, now);
@@ -125,7 +127,7 @@ export function wake(s, b, now = Date.now(), dev = 'here') {
   b.clean = Math.max(b.clean, WAKE_FLOOR.clean);
   b.joy = Math.max(b.joy, WAKE_FLOOR.joy);
   b.glowUntil = now + 9000;
-  cared(s, b, now);
+  cared(s, b, now, dev);
   return true;
 }
 export function feed(s, b, cheese, now = Date.now(), dev = 'here', by) {
@@ -135,15 +137,26 @@ export function feed(s, b, cheese, now = Date.now(), dev = 'here', by) {
   bump(b, 'feasts', dev);
   logFeast(s, b, cheese.id === 'crumb' ? 'a tiny crumb' : cheese.id, now, by);
   if (count(b, 'feasts') === 1) keepsake(s, 'firstfeast:' + b.id, '🧀', `${first(b)}'s first feast: ${cheese.id === 'crumb' ? 'a tiny crumb' : cheese.id}`, now);
-  cared(s, b, now);
+  cared(s, b, now, dev);
   return true;
 }
-export function play(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 18); b.full = clamp(b.full - 3); bump(b, 'boings', dev); cared(s, b, now); }
-export function hug(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 10); bump(b, 'hugs', dev); cared(s, b, now); }
+export function play(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 18); b.full = clamp(b.full - 3); bump(b, 'boings', dev); cared(s, b, now, dev); }
+export function hug(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 10); bump(b, 'hugs', dev); cared(s, b, now, dev); }
 export function scrub(s, b, amt, now = Date.now()) { b.clean = clamp(b.clean + amt); b.statsAt = now; const done = b.clean >= 100; if (done) cared(s, b, now); return done; }
 export function rename(s, b, name, now = Date.now()) { b.name = name; b.nameAt = now; s.updatedAt = now; }
 export function setWear(s, b, wear, now = Date.now()) { b.wear = wear; b.wearAt = now; s.updatedAt = now; }
 export function setField(s, f, v, now = Date.now()) { s[f] = v; s.at[f] = now; s.updatedAt = now; }
+
+/** Remember today's weather (for streaks and learned likes). Returns true if the diary changed. */
+export function noteWeather(s, kind, now = Date.now()) {
+  if (!kind) return false;
+  s.wxNow = { kind, t: now };
+  const d = localDate(now, s.tz); s.wxDays = s.wxDays || {};
+  if (s.wxDays[d] === kind) return false;
+  s.wxDays[d] = kind;
+  const keep = Object.keys(s.wxDays).sort().slice(-21); s.wxDays = Object.fromEntries(keep.map(k => [k, s.wxDays[k]]));
+  return true;
+}
 
 /* ---------------- growth, wearables, keepsakes ---------------- */
 export const first = b => b.name.split(' ')[0];
@@ -190,14 +203,14 @@ export function mood(b, { phase = 'day', now = Date.now() } = {}) {
 export const isBirthday = (s, d = new Date()) => !!(s.bday && +s.bday.d === d.getDate() && +s.bday.m === d.getMonth() + 1);
 
 export function logFeast(s, b, cheese, now = Date.now(), by) {
-  const e = { n: b.name, c: cheese, t: now }; if (by) e.by = by;
+  const e = { id: b.id, n: b.name, c: cheese, t: now }; if (by) e.by = by;
   s.log.unshift(e);
   s.log = s.log.slice(0, 60);
 }
 
 /* ---------------- merge ---------------- */
 const clone = o => JSON.parse(JSON.stringify(o));
-const logKey = e => `${e.t}|${e.n}|${e.c}|${e.by || ''}`;
+const logKey = e => `${e.t}|${e.id || e.n}|${e.c}|${e.by || ''}`;
 
 /**
  * Combine two saves of the same burrow without losing either side's care.
@@ -221,7 +234,7 @@ export function merge(a, b) {
     if (y.statsAt > x.statsAt || (y.statsAt === x.statsAt && y.tick > x.tick)) {
       ['full', 'clean', 'joy', 'napping', 'glowUntil', 'statsAt', 'tick'].forEach(k => x[k] = y[k]);
     }
-    COUNTERS.forEach(k => { for (const [dev, n] of Object.entries(y.cnt[k] || {})) x.cnt[k][dev] = Math.max(x.cnt[k][dev] || 0, n); });
+    for (const [k, devs] of Object.entries(y.cnt || {})) { x.cnt[k] = x.cnt[k] || {}; for (const [dev, n] of Object.entries(devs)) x.cnt[k][dev] = Math.max(x.cnt[k][dev] || 0, n); }
     x.taps = Math.max(x.taps || 0, y.taps || 0);
     x.days = [...new Set([...x.days, ...y.days])].sort();
     return x;
@@ -229,6 +242,8 @@ export function merge(a, b) {
   const seen = new Set(out.log.map(logKey));
   b.log.forEach(e => { if (!seen.has(logKey(e))) { out.log.push(clone(e)); seen.add(logKey(e)); } });
   out.log.sort((p, q) => q.t - p.t); out.log = out.log.slice(0, 60);
+  out.wxDays = { ...(b.wxDays || {}), ...(out.wxDays || {}) };
+  if ((b.wxNow?.t || 0) > (out.wxNow?.t || 0)) out.wxNow = clone(b.wxNow);
   const ks = new Set(out.album.map(k => k.k));
   b.album.forEach(k => { if (!ks.has(k.k)) out.album.push(clone(k)); });
   out.album.sort((p, q) => p.t - q.t);

@@ -262,3 +262,12 @@ details.form[open]{gap:12px}
 @keyframes twinkle{50%{filter:drop-shadow(0 0 8px #fffc) brightness(1.3)}}
 
 @media (max-width:440px){.banner{top:62px;left:12px;right:auto;font-size:13px;padding:4px 12px}}
+
+/* ---------------- personality ---------------- */
+.persona{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:13px}
+.temper{font-weight:800;font-size:12px;padding:1px 9px;border-radius:999px;background:var(--well);border:1px solid var(--line)}
+.temper.shy{background:color-mix(in srgb,#9ca8cc 25%,var(--card))}
+.temper.bouncy{background:color-mix(in srgb,#f2c94c 30%,var(--card))}
+.temper.sleepy{background:color-mix(in srgb,#7fb8d6 25%,var(--card))}
+.temper.curious{background:color-mix(in srgb,#86c46f 25%,var(--card))}
+.temper.bold{background:color-mix(in srgb,#eb9459 28%,var(--card))}

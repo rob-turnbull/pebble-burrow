@@ -6,6 +6,7 @@ import { phaseAt, sunFor, fmtClock } from './sky.js';
 import { seasonal, decorKey } from './seasons.js';
 import { fetchWeather, searchPlaces, locateMe, WeatherFX, kindIcon, KIND_LABEL, isCold, WEATHER_TTL } from './weather.js';
 import { GistSync } from './sync.js';
+import * as P from './personality.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
 
 /* ---------------- local persistence ---------------- */
@@ -134,13 +135,16 @@ function applyEnv() {
       : `<span>${night ? '🌙' : '☀️'} ${env.phase}${ev}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
   }
   earnEnvKeepsakes();
+  if (env.wx && E.noteWeather(S, env.kind)) touch(); else if (env.wx) saveLocal();
   // a being comments when the sky, weather or season changes
   const voice = `${env.phase}|${env.kind}|${env.sea.events.join(',')}`;
   if (lastVoiced && voice !== lastVoiced) {
     const [p0, k0, e0] = lastVoiced.split('|');
-    const line = env.kind !== k0 ? E.rand(WEATHER_LINES[env.kind] || ['']) : env.sea.events.join(',') !== e0 && env.sea.events[0] ? E.rand(SEASON_LINES[env.sea.events[0]] || ['']) : env.phase !== p0 ? E.rand(WEATHER_LINES[env.phase] || ['']) : '';
     const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1);
-    if (line && awake.length) setTimeout(() => say(E.rand(awake), line, 3600), 800);
+    const who = awake.length ? E.rand(awake) : -1;
+    const own = who > -1 && env.kind !== k0 && env.wx ? P.weatherLine(S, S.beings[who], env.kind) : null;
+    const line = own || (env.kind !== k0 ? E.rand(WEATHER_LINES[env.kind] || ['']) : env.sea.events.join(',') !== e0 && env.sea.events[0] ? E.rand(SEASON_LINES[env.sea.events[0]] || ['']) : env.phase !== p0 ? E.rand(WEATHER_LINES[env.phase] || ['']) : '');
+    if (line && who > -1) setTimeout(() => say(who, line, 3600), 800);
   }
   lastVoiced = voice;
 }
@@ -305,7 +309,7 @@ function update() {
   ${installHTML()}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
-  on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(["you're back! i was waiting, not worrying.", 'i dreamt about cheese. and you.', '*stretches* hello hello.'])); }));
+  on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(P.T(S.beings[sel]).wake)); }));
   on('a-feed', () => { cheeseOpen = !cheeseOpen; washMode = false; update(); });
   on('a-wash', () => { if (washMode) autoWash(); else { washMode = true; cheeseOpen = false; showSponge(); update(); } });
   on('a-play', () => act('play')); on('a-hug', () => act('hug'));
@@ -329,6 +333,7 @@ function cardHTML(b, i) {
   return `<article class="card ${i === sel ? 'sel' : ''}" data-i="${i}">
     <div class="nm">${renaming === i ? `<form class="rename" id="rnf"><input id="rn" value="${esc(b.name)}" maxlength="32" aria-label="new name"><button class="ghost">save</button><button type="button" class="ghost" id="rnx">✕</button></form>` : `<h3>${esc(b.name)}</h3><span class="chip ${m.k}">${m.t}</span>`}</div>
     <div class="row grow-row">${stageLine}</div>
+    <p class="persona"><span class="temper ${P.temperamentOf(b)}">${P.profile(S, b)[0]}</span><span class="meta">${P.profile(S, b).slice(1).map(esc).join(' · ')}</span></p>
     ${bar('full', 'tummy')}${bar('clean', 'sparkle')}${bar('joy', 'joy')}
     ${wearing === i ? `<div class="wears">${WEARABLES.map(w => unlocked[w.id]
       ? `<button class="wear ${b.wear === w.id ? 'on' : ''}" data-wear="${w.id}">${w.label}</button>`
@@ -372,11 +377,11 @@ function care(i, fn, after) {
 function feed(cid) {
   const b = S.beings[sel], c = CHEESES.find(x => x.id === cid);
   if (b.napping) care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => sparkle(sel));
-  if (b.full >= 96) { say(sel, 'so full. saving room for tomorrow.'); return; }
+  if (b.full >= 96) { cheeseOpen = false; update(); say(sel, 'so full. saving room for tomorrow.'); return; }
   cheeseOpen = false;
   care(sel, (s, x, now) => E.feed(s, x, c, now, D.dev), () => {
     anim(sel, 'munch'); fx_(sel, '🧀', 1);
-    setTimeout(() => { fx_(sel, '💛', 3); say(sel, E.rand(['nom nom nom', 'that was the best one yet', '*happy tummy noises*', 'more tomorrow? promise?'])); }, 1000);
+    setTimeout(() => { fx_(sel, '💛', 3); say(sel, P.feedLine(S, S.beings[sel], cid === 'crumb' ? 'a tiny crumb' : cid)); }, 1000);
   });
 }
 function act(kind) {
@@ -384,9 +389,9 @@ function act(kind) {
   if (b.napping) { say(sel, 'zzz… (wake me first?)'); return; }
   if (kind === 'play') care(sel, (s, x, now) => E.play(s, x, now, D.dev), () => {
     anim(sel, 'boing'); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
-    say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(['boing!', 'again again!', 'i touched the sky a bit'])); });
+    say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(P.T(S.beings[sel]).boing)); });
   if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
-    anim(sel, 'squish'); fx_(sel, '💗', 3); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(['smoosh.', 'warm warm warm', 'i needed that'])); });
+    anim(sel, 'squish'); fx_(sel, '💗', 3); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
 }
 function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
@@ -580,6 +585,12 @@ function copyField(id, msg, set) {
 }
 
 /* ---------------- boot & loops ---------------- */
+function chatter() {
+  if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
+  const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
+  const i = E.rand(awake); say(i, E.rand(P.T(S.beings[i]).idle), 3400);
+}
+
 function tick() {
   if (!S || view === 'setup') return;
   const before = S.beings.map(b => b.napping);
@@ -597,6 +608,7 @@ async function boot() {
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();
     if (hours >= 1) { const d = hours >= 48 ? Math.round(hours / 24) + ' days' : Math.round(hours) + ' hours';
       setTimeout(() => say(0, napped ? `you were gone ${d}. we napped and kept your spot warm.` : `you're back! it's been ${d}.`, 4200), 500); }
+    else if (hours >= 0.08) setTimeout(() => { const i = S.beings.findIndex(b => !b.napping); if (i > -1) say(i, E.rand(P.T(S.beings[i]).greet), 3600); }, 600);
     const visit = S.log.find(l => l.by && l.t > Date.now() - hours * 36e5);
     if (visit && hours >= 0.25) setTimeout(() => say(1 % S.beings.length, `${visit.by} came by while you were away!`, 4200), 2200);
   } else renderSetup();
@@ -605,6 +617,7 @@ async function boot() {
   refreshWeather();
 
   setInterval(tick, 30e3);
+  setInterval(chatter, 80e3);
   setInterval(() => refreshWeather(), 10 * 60e3);
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
