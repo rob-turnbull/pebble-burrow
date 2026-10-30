@@ -1,6 +1,6 @@
 # Pebble Burrow
 
-Two little beings on a hill that follows your real sky, weather and seasons. Feed them cheese, wash them, boing them, hug them, dress them up. They grow up with you. **Nothing here ever dies**: neglect only means a nap, and coming back makes them glow.
+Two little beings on a hill that follows your real sky, weather and seasons. Feed them cheese, wash them, boing them, hug them, play games, dress them up, furnish their burrow, and trade postcards with friends. They grow up with you, and they remember. **Nothing here ever dies**: neglect only means a nap, and coming back makes them glow.
 
 A personal, clean-room recreation of the gentle virtual-pet idea behind tummygotcheese.com. All art, names and code are original.
 
@@ -75,6 +75,26 @@ Hemisphere-aware. Autumn leaves and a golden hill, spring petals, winter lights 
 
 Optional, and runs in your own Cloudflare account. See **[worker/README.md](worker/README.md)**: three commands, then paste one link into settings.
 
+## Personalities
+
+Every being has a temperament (shy, bouncy, sleepy, curious or bold) that shapes what they say. It's picked from the being's id, so every device agrees. They also **learn**: their favourite cheese comes from what you actually feed them, and their favourite weather from the weather you play with them in. They notice streaks ("brie 3 days in a row", "third rainy day in a row"), greet you when you come back, and chatter now and then.
+
+## Sound and touch
+
+Tap 🔇 to turn sound on (remembered per device). Every sound is synthesised in the browser: munches, boings, hugs, sparkles, voices pitched by species, rain on the roof, thunder after lightning, crickets on clear nights. On Android the phone gives small vibrations too (toggle in settings); iPhone doesn't allow websites to vibrate.
+
+## Games
+
+Tap **games**: *catch the cheese* (gold stars are worth 3), *hide and seek* (a peek gives them away if you're stuck), and *copy the pattern* for grown beings. They're no-lose: every round earns 6–30 joy and costs a little tummy.
+
+## Inside the burrow
+
+Tap the door or **🏠 inside**. Napping beings sleep in the bed, and the window shows your real sky and weather. **Arrange the room** to place furniture in six spots. There are 12 pieces to collect, from games, weather, seasons, feasts, growing up and postcards; "how to find the rest" lists what's left. Grown beings choose a favourite spot that suits their temperament.
+
+## Postcards
+
+Needs your helper (see below). Settings shows **your mailbox address**, which is safe to give friends because it can only receive postcards. Tap **💌 write one** for a note (140 characters) and a doodle. A new sender waits until you say yes, and "no thanks" removes their cards and stops future ones. Each person can send 10 a day at most. Your first card from each friend goes in the album, and the first one unlocks a painting for the room.
+
 ## Updating
 
 Edit files, commit, push. Then bump `VERSION` in `sw.js` (e.g. `v2.0.1`) so installed copies fetch the new files. They update the next time they open.
@@ -93,7 +113,12 @@ js/sky.js             sunrise/sunset maths and day phases
 js/weather.js         Open-Meteo weather, place search, rain/snow effects
 js/sync.js            GitHub Gist sync
 js/seasons.js         seasonal calendar
-js/helper.js          talks to your Cloudflare helper (nudges)
+js/helper.js          talks to your Cloudflare helper (nudges, postcards)
+js/personality.js     temperaments, learned likes, history-aware lines
+js/sound.js           synthesised sounds, ambience, haptics
+js/games.js           the three mini-games
+js/room.js            inside the burrow: furniture, slots, favourite spots
+js/post.js            postcard composer and cards
 js/app.js             rendering, actions, loops
 worker/               the optional Cloudflare helper (nudges + AI visitor)
 tests/                node --test unit tests
@@ -105,7 +130,7 @@ tests/                node --test unit tests
 npm test     # or: node --test tests/*.test.mjs
 ```
 
-38 tests cover the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
+54 tests cover personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
 
 ## Local preview
 

@@ -10,7 +10,8 @@ import * as P from './personality.js';
 import * as Snd from './sound.js';
 import { GAMES, openGame } from './games.js';
 import * as R from './room.js';
-import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
+import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
+import * as Post from './post.js';
 
 /* ---------------- local persistence ---------------- */
 const K = { state: 'pebble-burrow', device: 'pebble-burrow-device', wx: 'pebble-burrow-weather', legacy: 'pebble-burrow-v1' };
@@ -30,6 +31,7 @@ const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZon
 
 /* ---------------- ui state ---------------- */
 const app = document.getElementById('app');
+let MB = null, mbErr = '', mailAll = false;
 let gamesOpen = false, scene = 'hill', arranging = false, pickSlot = '';
 let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
 let panelNote = '', placeResults = [], placeBusy = false, syncBusy = false, syncMsg = '', syncErr = false;
@@ -328,6 +330,7 @@ function update() {
   <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
   </section>
+  ${postHTML()}
   ${scene === 'room' ? roomPanelHTML() : ''}
   ${albumHTML()}
   ${installHTML()}
@@ -341,6 +344,12 @@ function update() {
   on('a-play', () => act('play')); on('a-hug', () => act('hug'));
   on('i-install', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; update(); });
   on('album-more', () => { albumAll = !albumAll; update(); });
+  on('pc-write', writePostcard);
+  on('mail-more', () => { mailAll = !mailAll; update(); });
+  on('mail-open', () => { D.mailSeen = Date.now(); saveDevice(); update(); });
+  below.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { const h = parseHelper(S.helper); try { await mailAction(h, 'delete', { id: b.dataset.del }); MB.cards = MB.cards.filter(c => c.id !== b.dataset.del); } catch (e) { mbErr = e.message; } update(); });
+  below.querySelectorAll('[data-req]').forEach(b => b.onclick = async () => { const h = parseHelper(S.helper), [act, sid] = b.dataset.req.split(':');
+    try { await mailAction(h, act, { sid }); const r = MB.requests.find(x => x.sid === sid); if (act === 'approve' && r) E.setFriend(S, r.reply, r.name); await loadMail(true); touch(); } catch (e) { mbErr = e.message; } update(); });
   on('arrange', () => { arranging = !arranging; pickSlot = ''; renderBurrow(); });
   below.querySelectorAll('[data-place]').forEach(p => p.onclick = () => { R.place(S, pickSlot, p.dataset.place); pickSlot = ''; Snd.play('tap'); touch(); renderBurrow();
     const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
@@ -370,6 +379,49 @@ function cardHTML(b, i) {
     <div class="row between"><span class="meta">${SPECIES[b.sp].label} · ${E.count(b, 'feasts')} feasts · ${E.count(b, 'hugs')} hugs · ${E.count(b, 'boings')} boings</span>
       ${renaming === i ? '' : `<span class="row tight"><button class="linkbtn" data-wearing="${i}">${wearing === i ? 'done' : 'dress up'}</button><button class="linkbtn" data-rename="${i}">rename</button></span>`}</div>
   </article>`;
+}
+
+/* ---------------- postcards ---------------- */
+function postHTML() {
+  const h = parseHelper(S.helper);
+  if (!h) return `<section class="feasts mail"><div class="row between"><h2>postcards</h2></div><p class="hint">postcards travel through your helper. set it up in settings → nudges & AI visitor, then friends can write to you.</p></section>`;
+  if (!MB) return `<section class="feasts mail"><div class="row between"><h2>postcards</h2></div><p class="hint">${mbErr ? esc(mbErr) : 'checking the mailbox…'}</p></section>`;
+  if (!MB.address) return `<section class="feasts mail"><div class="row between"><h2>postcards</h2></div><p class="hint">your helper needs a quick update for postcards: in the worker folder, run <code>node setup.mjs</code> again.</p></section>`;
+  const fresh = MB.cards.filter(c => c.t > (D.mailSeen || 0)).length, shown = mailAll ? MB.cards : MB.cards.slice(0, 3);
+  return `<section class="feasts mail"><div class="row between"><h2>postcards ${fresh ? `<span class="badge">${fresh} new</span>` : ''}</h2><button class="btn" id="pc-write">💌 write one</button></div>
+    ${MB.requests.map(r => `<div class="request"><span><strong>${esc(r.name)}</strong> wants to send you postcards${r.waiting ? ` (${r.waiting} waiting)` : ''}</span><span class="row tight"><button class="btn" data-req="approve:${esc(r.sid)}">say yes</button><button class="linkbtn" data-req="block:${esc(r.sid)}">no thanks</button></span></div>`).join('')}
+    ${MB.cards.length ? `<div class="postcards">${shown.map(c => Post.cardHTML(c)).join('')}</div>
+      ${MB.cards.length > 3 ? `<button class="linkbtn" id="mail-more">${mailAll ? 'show fewer' : `show all ${MB.cards.length}`}</button>` : ''}
+      ${fresh ? `<button class="linkbtn" id="mail-open">mark as read</button>` : ''}`
+      : `<p class="hint">no postcards yet. give friends your mailbox address from settings, or write to someone first.</p>`}
+    ${mbErr ? `<p class="note danger">${esc(mbErr)}</p>` : ''}
+  </section>`;
+}
+
+let mailAt = 0;
+async function loadMail(force = false) {
+  const h = parseHelper(S?.helper); if (!h) { MB = null; return; }
+  if (!force && Date.now() - mailAt < 60e3) return;
+  mailAt = Date.now();
+  try {
+    MB = await getMailbox(h); mbErr = '';
+    let got = false;
+    const seen = new Set();
+    [...MB.cards].reverse().forEach(c => { if (seen.has(c.sid)) return; seen.add(c.sid); got = E.keepsake(S, 'post:' + c.sid, '💌', `first postcard from ${c.from.name}`, c.t) || got; });
+    MB.friends.forEach(f => { if (!(S.friends || []).some(x => x.addr === f.reply)) { E.setFriend(S, f.reply, f.name); got = true; } });
+    if (got) touch();
+  } catch (e) { mbErr = e.message; }
+  if (view === 'burrow' && !busyTyping() && !washMode) update();
+}
+
+function writePostcard() {
+  if (!MB?.address) return;
+  Post.compose({
+    friends: (S.friends || []).filter(f => !f.gone), beings: S.beings.map(b => ({ name: E.first(b) })), me: S.owner,
+    isAddress: isMailAddress, fx: Snd,
+    addFriend: (addr, name) => { E.setFriend(S, addr, name); touch(); },
+    send: (card, to) => sendPostcard(to, { from: { name: S.owner, reply: MB.address, burrow: `${S.owner}${/s$/i.test(S.owner) ? "'" : "'s"} burrow` }, ...card })
+  });
 }
 
 function roomPanelHTML() {
@@ -509,6 +561,7 @@ function confetti() { const st = $('stage'); const cols = seasonal().costume ? [
 /* ---------------- settings ---------------- */
 async function checkHelper() {
   const h = parseHelper(S.helper); if (!h) { helperOk = null; return; }
+  loadMail(true);
   try { await helperStatus(h); helperOk = true; } catch (e) { helperOk = false; helperNote = e.message; }
   try { nudgesOn = !!(await currentSubscription()); } catch { nudgesOn = false; }
   if (view === 'settings' && !busyTyping()) update();
@@ -569,6 +622,11 @@ function settingsHTML() {
       <div class="field">AI visitor address (custom connector)
         <div class="row"><input id="n-mcp" readonly value="${esc(h.mcp)}"><button class="btn" id="n-copy">copy</button></div></div>
       <p class="hint">in claude.ai: settings → connectors → add custom connector, name it “Pebble Burrow”, paste this address. your Claude can then peek, feed, hug and wake. it signs the feast book when it visits. keep this address private, it works like a key.</p>
+      ${MB?.address ? `<div class="field">your postcard mailbox (fine to give to friends)
+        <div class="row"><input id="n-mail" readonly value="${esc(MB.address)}"><button class="btn" id="n-mcopy">copy</button></div></div>
+      <p class="hint">this address can only receive postcards. new senders wait until you say yes.</p>` : ''}
+      ${(S.friends || []).filter(f => !f.gone).length ? `<div class="field">friends you write to<ul class="friends">${S.friends.filter(f => !f.gone).map(f => `<li><span>${esc(f.name)}</span><button class="linkbtn" data-unfriend="${esc(f.addr)}">remove</button></li>`).join('')}</ul></div>` : ''}
+      ${MB?.blocked?.length ? `<div class="field">said no to<ul class="friends">${MB.blocked.map(f => `<li><span>${esc(f.name)}</span><button class="linkbtn" data-unblock="${esc(f.sid)}">let them ask again</button></li>`).join('')}</ul></div>` : ''}
       <div class="row"><button class="linkbtn" id="n-forget">use a different helper</button></div>`
     : `<p class="hint">nudges and the AI visitor run on a small free helper in your own Cloudflare account. the repo’s <strong>worker/README.md</strong> sets it up in three commands. it prints a <em>helper link</em>; paste it here once and every synced device gets it.</p>
       <div class="row"><label class="field grow">helper link<input id="n-link" placeholder="https://pebble-burrow-helper.….workers.dev/k/…" autocomplete="off"></label><button class="btn" id="n-save">connect</button></div>`}
@@ -623,7 +681,7 @@ function wireSettings() {
     if (!h) { helperNote = 'that doesn’t look like a helper link. it ends in /k/ followed by a long key.'; update(); return; }
     helperNote = 'checking the helper…'; update();
     try { await helperStatus(h); } catch (e) { helperNote = e.message; update(); return; }
-    E.setField(S, 'helper', link); touch(); helperOk = true; helperNote = 'helper connected. turn on nudges on each device you want them on.'; update(); });
+    E.setField(S, 'helper', link); touch(); helperOk = true; loadMail(true); helperNote = 'helper connected. turn on nudges on each device you want them on.'; update(); });
   on('n-on', async () => { const h = parseHelper(S.helper);
     helperNote = 'asking for permission…'; update();
     try { await enableNudges(h, navigator.userAgent.slice(0, 80)); nudgesOn = true; helperNote = 'nudges are on for this device.'; }
@@ -632,6 +690,9 @@ function wireSettings() {
   on('n-off', async () => { await disableNudges(parseHelper(S.helper)); nudgesOn = false; helperNote = 'nudges are off for this device.'; update(); });
   on('n-test', async () => { try { const r = await testNudge(parseHelper(S.helper)); helperNote = r.sent ? 'sent. it should arrive in a few seconds.' : 'the helper has no devices to nudge yet.'; } catch (e) { helperNote = e.message; } update(); });
   on('n-copy', () => copyField('n-mcp', 'address copied.', m => helperNote = m));
+  on('n-mcopy', () => copyField('n-mail', 'mailbox address copied. send it to a friend.', m => helperNote = m));
+  document.querySelectorAll('[data-unfriend]').forEach(b => b.onclick = () => { const f = S.friends.find(x => x.addr === b.dataset.unfriend); E.setFriend(S, f.addr, f.name, Date.now(), true); touch(); update(); });
+  document.querySelectorAll('[data-unblock]').forEach(b => b.onclick = async () => { await mailAction(parseHelper(S.helper), 'unblock', { sid: b.dataset.unblock }).catch(() => {}); await loadMail(true); update(); });
   on('n-forget', async () => { if (nudgesOn) await disableNudges(parseHelper(S.helper)).catch(() => {}); E.setField(S, 'helper', ''); touch(); helperOk = null; nudgesOn = false; helperNote = ''; update(); });
 
   on('s-copy', () => copyField('s-code', 'code copied.', m => panelNote = m));
@@ -676,14 +737,16 @@ async function boot() {
 
   if (D.token) { const r = await syncAndRefresh(); if (r === 'changed' && view !== 'setup') say(0, 'caught up from your other device!', 3200); }
   refreshWeather();
+  if (S) loadMail(true);
 
   setInterval(tick, 30e3);
+  setInterval(() => { if (S && document.visibilityState === 'visible') loadMail(); }, 5 * 60e3);
   setInterval(chatter, 80e3);
   setInterval(() => refreshWeather(), 10 * 60e3);
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'hidden') { if (dirty) syncNow(); return; }
-    if (!S) return; tick(); refreshWeather();
+    if (!S) return; tick(); refreshWeather(); loadMail();
     if (D.token && Date.now() - (D.lastSync || 0) > 60e3) syncAndRefresh();
   });
   addEventListener('online', () => { if (dirty) syncNow(); refreshWeather(); });

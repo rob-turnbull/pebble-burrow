@@ -6,9 +6,10 @@ import { GistSync } from '../../js/sync.js';
 import { fetchWeather } from '../../js/weather.js';
 import { sunFor, phaseAt } from '../../js/sky.js';
 import { sendPush } from './webpush.js';
-import { decideNudge, recordNudge } from './nudge.js';
+import { decideNudge, recordNudge, localParts, NUDGE } from './nudge.js';
+import * as Mail from './mail.js';
 
-const VERSION = '3.0.0';
+const VERSION = '3.5.0';
 const UA = { 'User-Agent': 'pebble-burrow-helper' };
 
 /* ---------------- small helpers ---------------- */
@@ -78,6 +79,16 @@ async function broadcast(env, list, n) {
     } catch { /* one bad device never blocks the others */ }
   }
   return sent;
+}
+
+/** A postcard notice for the owner's devices. Respects quiet hours; the card waits in the mailbox either way. */
+export async function notifyOwner(env, title, body, tag, now = Date.now()) {
+  const list = await subs(env); if (!list.length) return 0;
+  let tz = '';
+  try { const s = await loadSave(env, now); tz = s?.tz || ''; } catch {}
+  const { hour } = localParts(now, tz);
+  if (hour >= NUDGE.quietFrom || hour < NUDGE.quietTo) return 0;
+  return broadcast(env, list, { title, body, tag });
 }
 
 export async function runNudges(env, now = Date.now()) {
@@ -178,6 +189,19 @@ export async function mcp(env, msg) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), p = url.pathname.replace(/\/+$/, '') || '/';
+
+    const mail = p.match(/^\/mail\/([^/]+)$/);
+    if (mail) {
+      const open = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+      if (!env.MAILBOX_KEY || !sameKey(mail[1], env.MAILBOX_KEY)) return new Response(JSON.stringify({ error: 'no mailbox here' }), { status: 404, headers: { 'Content-Type': 'application/json', ...open } });
+      if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: open });
+      if (req.method !== 'POST') return new Response('this is a pebble burrow mailbox. postcards arrive here.', { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...open } });
+      if (+(req.headers.get('Content-Length') || 0) > 90000) return new Response(JSON.stringify({ error: 'that postcard is too big' }), { status: 413, headers: { 'Content-Type': 'application/json', ...open } });
+      let body; try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'not a postcard' }), { status: 400, headers: { 'Content-Type': 'application/json', ...open } }); }
+      const r = await Mail.receive(env.BURROW, body, Date.now(), (title, text, tag) => notifyOwner(env, title, text, tag));
+      return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json', ...open } });
+    }
+
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env) });
 
     const keyed = p.match(/^\/(k|peek|mcp)\/([^/]+)$/);
@@ -206,6 +230,14 @@ export default {
     if (p === '/unsubscribe' && req.method === 'POST') {
       const { endpoint } = await req.json(); if (endpoint) await env.BURROW.delete('sub:' + await hash(endpoint));
       return json(env, { ok: true });
+    }
+    if (p === '/mailbox') {
+      const address = env.MAILBOX_KEY ? `${url.origin}/mail/${env.MAILBOX_KEY}` : '';
+      if (req.method === 'GET') return json(env, address ? await Mail.mailbox(env.BURROW, address) : { address: '', cards: [], requests: [], friends: [], blocked: [] });
+      const { action, sid, id } = await req.json();
+      if (action === 'delete') { await Mail.removeCard(env.BURROW, id); return json(env, { ok: true }); }
+      if (['approve', 'block', 'unblock'].includes(action)) return json(env, { ok: await Mail.decide(env.BURROW, String(sid), action) });
+      return json(env, { error: 'unknown action' }, 400);
     }
     if (p === '/test' && req.method === 'POST') {
       const list = await subs(env); let name = 'everyone';

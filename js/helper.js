@@ -56,3 +56,18 @@ export async function disableNudges(h) {
 }
 
 export const testNudge = h => call(h, '/test', {});
+
+/* ---------------- postcards ---------------- */
+export const isMailAddress = a => /^https:\/\/[^\s/]+\/mail\/[A-Za-z0-9_-]{16,}$/.test(String(a || '').trim());
+export const getMailbox = h => call(h, '/mailbox');
+export const mailAction = (h, action, ids) => call(h, '/mailbox', { action, ...ids });
+
+/** Send a postcard straight to a friend's mailbox (no key needed; their helper decides if it's welcome). */
+export async function sendPostcard(to, card) {
+  let r;
+  try { r = await fetch(to.trim(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(card) }); }
+  catch { throw new Error('couldn’t reach their mailbox. check the address, or try again when you’re online.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `their mailbox answered ${r.status}`);
+  return j.status || 'delivered';
+}

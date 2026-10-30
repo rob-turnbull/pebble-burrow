@@ -55,6 +55,7 @@ export function migrate(s) {
   s.album = Array.isArray(s.album) ? s.album : [];
   s.wxDays = s.wxDays || {};
   s.room = s.room || {};
+  s.friends = Array.isArray(s.friends) ? s.friends : [];
   s.beings.forEach(b => {
     b.id = b.id || uid();
     b.nameAt = b.nameAt || 0;
@@ -147,6 +148,14 @@ export function scrub(s, b, amt, now = Date.now()) { b.clean = clamp(b.clean + a
 export function rename(s, b, name, now = Date.now()) { b.name = name; b.nameAt = now; s.updatedAt = now; }
 export function setWear(s, b, wear, now = Date.now()) { b.wear = wear; b.wearAt = now; s.updatedAt = now; }
 export function setField(s, f, v, now = Date.now()) { s[f] = v; s.at[f] = now; s.updatedAt = now; }
+
+/** Add, rename or remove (gone: true) a friend's postcard address. */
+export function setFriend(s, addr, name, now = Date.now(), gone = false) {
+  s.friends = s.friends || [];
+  const f = s.friends.find(x => x.addr === addr);
+  if (f) Object.assign(f, { name: name || f.name, at: now, gone }); else s.friends.push({ addr, name, at: now, gone });
+  s.updatedAt = Math.max(s.updatedAt || 0, now);
+}
 
 /** Remember today's weather (for streaks and learned likes). Returns true if the diary changed. */
 export function noteWeather(s, kind, now = Date.now()) {
@@ -257,6 +266,9 @@ export function merge(a, b) {
   out.log.sort((p, q) => q.t - p.t); out.log = out.log.slice(0, 60);
   out.wxDays = { ...(b.wxDays || {}), ...(out.wxDays || {}) };
   out.room = out.room || {};
+  const fr = new Map((out.friends || []).map(f => [f.addr, f]));
+  (b.friends || []).forEach(f => { if ((f.at || 0) > (fr.get(f.addr)?.at || 0)) fr.set(f.addr, clone(f)); });
+  out.friends = [...fr.values()];
   for (const [slot, v] of Object.entries(b.room || {})) if ((v?.at || 0) > (out.room[slot]?.at || 0)) out.room[slot] = clone(v);
   if ((b.wxNow?.t || 0) > (out.wxNow?.t || 0)) out.wxNow = clone(b.wxNow);
   const ks = new Set(out.album.map(k => k.k));
