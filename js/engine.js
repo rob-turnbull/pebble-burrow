@@ -158,6 +158,18 @@ export function noteWeather(s, kind, now = Date.now()) {
   return true;
 }
 
+/** A finished mini-game. No-lose: every round earns joy; a better round earns a little more. */
+export function playedGame(s, b, game, score, now = Date.now(), dev = 'here') {
+  const joy = Math.min(30, 6 + score * 2);
+  b.joy = clamp(b.joy + joy); b.full = clamp(b.full - 4);
+  bump(b, 'games', dev); bump(b, 'game:' + game, dev);
+  cared(s, b, now, dev);
+  const label = { catch: 'catch the cheese', seek: 'hide and seek', copy: 'copy the pattern' }[game] || game;
+  keepsake(s, `game:${game}`, { catch: '🧀', seek: '🌿', copy: '🌼' }[game] || '🎲', `${first(b)} played ${label} for the first time`, now);
+  return { joy };
+}
+export const gamesPlayed = s => s.beings.reduce((a, b) => a + count(b, 'games'), 0);
+
 /* ---------------- growth, wearables, keepsakes ---------------- */
 export const first = b => b.name.split(' ')[0];
 export function stageOf(b) { const n = b.days.length; return [...STAGES].reverse().find(st => n >= st.from).id; }

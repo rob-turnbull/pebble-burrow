@@ -47,3 +47,12 @@ test('care during weather teaches a favourite weather, and merges across devices
   assert.equal(P.favouriteWeather(m.beings[0]), 'snow');
   assert.ok(P.profile(m, m.beings[0]).some(x => /snowy/.test(x)));
 });
+
+test('games are no-lose: even a zero score earns joy, and the first play is kept', () => {
+  const s = burrow(), b = s.beings[0]; b.joy = 40; b.full = 50;
+  const r = E.playedGame(s, b, 'catch', 0, T0 + 5);
+  assert.equal(r.joy, 6); assert.equal(b.joy, 46); assert.equal(b.full, 46);
+  assert.equal(E.playedGame(s, b, 'catch', 20, T0 + 6).joy, 30, 'capped');
+  assert.equal(E.gamesPlayed(s), 2);
+  assert.equal(s.album.filter(k => k.k === 'game:catch').length, 1);
+});

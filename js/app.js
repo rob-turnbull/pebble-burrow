@@ -8,6 +8,7 @@ import { fetchWeather, searchPlaces, locateMe, WeatherFX, kindIcon, KIND_LABEL, 
 import { GistSync } from './sync.js';
 import * as P from './personality.js';
 import * as Snd from './sound.js';
+import { GAMES, openGame } from './games.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge } from './helper.js';
 
 /* ---------------- local persistence ---------------- */
@@ -28,6 +29,7 @@ const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZon
 
 /* ---------------- ui state ---------------- */
 const app = document.getElementById('app');
+let gamesOpen = false;
 let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
 let panelNote = '', placeResults = [], placeBusy = false, syncBusy = false, syncMsg = '', syncErr = false;
 let helperNote = '', helperOk = null, nudgesOn = false;
@@ -301,8 +303,12 @@ function update() {
       <button class="act ${washMode ? 'on' : ''}" id="a-wash"><span class="ic">🧽</span>${washMode ? 'auto-wash' : 'wash'}</button>
       <button class="act" id="a-play"><span class="ic">🎈</span>boing</button>
       <button class="act" id="a-hug"><span class="ic">🫶</span>hug</button>
+      <button class="act ${gamesOpen ? 'on' : ''}" id="a-games"><span class="ic">🎲</span>games</button>
     </div>
     ${cheeseOpen ? `<div class="cheeses">${CHEESES.map(c => `<button class="cheese" data-c="${c.id}">${c.label}</button>`).join('')}</div>` : ''}
+    ${gamesOpen ? `<div class="cheeses">${Object.entries(GAMES).map(([k, g]) => g.grownOnly && E.stageOf(b) !== 'grown'
+      ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
+      : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}</div>` : ''}
   </section>
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
   <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
@@ -313,12 +319,14 @@ function update() {
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
   on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(P.T(S.beings[sel]).wake)); }));
-  on('a-feed', () => { cheeseOpen = !cheeseOpen; washMode = false; update(); });
+  on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
+  on('a-games', () => { gamesOpen = !gamesOpen; cheeseOpen = false; washMode = false; update(); });
+  below.querySelectorAll('[data-game]').forEach(g => g.onclick = () => startGame(g.dataset.game));
   on('a-wash', () => { if (washMode) autoWash(); else { washMode = true; cheeseOpen = false; showSponge(); update(); } });
   on('a-play', () => act('play')); on('a-hug', () => act('hug'));
   on('i-install', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; update(); });
   on('album-more', () => { albumAll = !albumAll; update(); });
-  below.querySelectorAll('.cheese').forEach(c => c.onclick = () => feed(c.dataset.c));
+  below.querySelectorAll('[data-c]').forEach(c => c.onclick = () => feed(c.dataset.c));
   below.querySelectorAll('.card').forEach(c => c.onclick = e => { if (e.target.closest('button,input')) return; sel = +c.dataset.i; update(); });
   below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; wearing = -1; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
   below.querySelectorAll('[data-wearing]').forEach(r => r.onclick = () => { wearing = wearing === +r.dataset.wearing ? -1 : +r.dataset.wearing; renaming = -1; update(); });
@@ -396,6 +404,21 @@ function act(kind) {
   if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
     anim(sel, 'squish'); fx_(sel, '💗', 3); Snd.play('hug'); Snd.buzz([40]); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
 }
+function startGame(kind) {
+  const i = sel, b = S.beings[i];
+  gamesOpen = false;
+  if (b.napping) { say(i, 'zzz… (wake me first?)'); update(); return; }
+  if (b.full < 10) { say(i, 'too hungry to play… snack first?'); update(); return; }
+  update();
+  openGame(kind, { being: { name: E.first(b), art: art(b.sp).replace('<svg ', `<svg data-wear="${b.wear || ''}" `) },
+    fx: { play: Snd.play, buzz: Snd.buzz },
+    done: score => {
+      let joy = 0;
+      care(i, (s, x, now) => { joy = E.playedGame(s, x, kind, score, now, D.dev).joy; }, () => { fx_(i, '🎉', 2); say(i, score >= 8 ? 'again! again!' : E.rand(P.T(S.beings[i]).boing)); });
+      return `${E.first(b)}\u2019s joy +${joy}`;
+    } });
+}
+
 function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
   const b = S.beings[i]; b.taps = (b.taps || 0) + 1;
