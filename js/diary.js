@@ -37,7 +37,9 @@ const NIGHT = [
   ['🌙', '{n} slept with one ear listening for you.'],
   ['💭', '{n} talked in their sleep. mostly about cheese.'],
   ['⭐', '{n} looked at the stars and picked one out for you.'],
-  ['🦉', '{n} heard a noise, checked the whole burrow, and went back to bed.']
+  ['🦉', '{n} heard a noise, checked the whole burrow, and went back to bed.'],
+  ['🌠', '{n} stayed up to count shooting stars. counted two, fell asleep on the third.'],
+  ['🌙', '{n} waved goodnight to the moon. it didn\u2019t wave back, but it was thinking about it.']
 ];
 
 /**

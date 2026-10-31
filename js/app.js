@@ -20,6 +20,7 @@ import * as V from './visitors.js';
 import * as PH from './photo.js';
 import * as HZ from './horizon.js';
 import * as WS from './wishes.js';
+import * as NT from './night.js';
 import { esc, fmtAgo, fmtDay } from './util.js';
 import * as Vw from './views.js';
 import { startFireworks } from './fireworks.js';
@@ -144,7 +145,10 @@ function applyEnv() {
   st.dataset.season = env.sea.season;
   const orb = $('orb');
   if (orb) {
-    orb.className = 'orb ' + (env.phase === 'night' ? 'moon' : env.phase);
+    const moonUp = env.phase === 'night';
+    orb.className = 'orb ' + (moonUp ? 'moon' : env.phase);
+    const mp = NT.moonPhase(new Date()), mk = moonUp ? mp.name + Math.round(mp.lit * 20) : '';
+    if (orb.dataset.mk !== mk) { orb.dataset.mk = mk; orb.innerHTML = moonUp ? NT.moonSVG(mp) : ''; orb.setAttribute('title', moonUp ? mp.name : ''); }
     orb.style.left = (6 + 80 * env.t) + '%';
     orb.style.top = (58 - 46 * Math.sin(Math.PI * env.t)) + '%';
   }
@@ -154,12 +158,13 @@ function applyEnv() {
   paintDecor();
   const chip = $('wxchip');
   if (chip) {
-    const night = env.phase === 'night', evk = env.sea.events.find(e => EVENT_LABEL[e] && e !== 'lights' && e !== 'newyear') || env.sea.events[0], ev = env.sea.costume ? ' · 🎃' : evk && EVENT_LABEL[evk] ? ' · ' + EVENT_LABEL[evk] : '';
+    const night = env.phase === 'night', evk = env.sea.events.find(e => EVENT_LABEL[e] && e !== 'lights' && e !== 'newyear') || env.sea.events[0], shower = env.phase === 'night' && NT.meteorShower(new Date()), ev = env.sea.costume ? ' · 🎃' : shower ? ` · ${shower.toLowerCase()} tonight` : evk && EVENT_LABEL[evk] ? ' · ' + EVENT_LABEL[evk] : '';
     chip.innerHTML = env.wx
       ? `<span>${kindIcon(env.kind, night)} ${env.wx.temp}°${S.units}</span><span class="muted">${esc(S.place.name)} · ${env.phase}${ev}</span>`
       : `<span>${night ? '🌙' : '☀️'} ${env.phase}${ev}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
   }
   earnEnvKeepsakes();
+  nightSky();
   dressForWeather();
   ['windy', 'gale', 'hot', 'cold', 'freezing', 'bright', 'rainbow'].forEach(k => st.classList.toggle('c-' + k, !!env.c?.[k]));
   if (env.wx && E.noteWeather(S, env.kind)) touch(); else if (env.wx) saveLocal();
@@ -862,6 +867,43 @@ function noteAway(now = Date.now()) {
   DIARY = { from, to: now, entries };
   try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
   return true;
+}
+
+/* ---------------- night sky ---------------- */
+let starTimer = 0, starGap = 0;
+function nightSky() {
+  const gap = NT.starRate({ phase: env.phase, kind: env.wx ? env.kind : 'clear' });
+  if (gap !== starGap) { starGap = gap; clearTimeout(starTimer); if (gap) scheduleStar(true); }
+  if (env.phase !== 'night') return;
+  const mp = NT.moonPhase(new Date()), d = E.localDate(Date.now(), S.tz);
+  let got = false;
+  if (mp.full) got = E.keepsake(S, 'fullmoon:' + d.slice(0, 7), '🌕', `watched the full moon rise, ${new Date().toLocaleDateString(undefined, { month: 'long' })}`, Date.now()) || got;
+  const shower = NT.meteorShower(new Date());
+  if (shower && (!env.wx || env.kind === 'clear')) got = E.keepsake(S, 'shower:' + shower + d.slice(0, 4), '☄️', `stayed up for the ${shower} meteor shower`, Date.now()) || got;
+  if (got) touch();
+}
+function scheduleStar(first = false) {
+  clearTimeout(starTimer); if (!starGap) return;
+  const wait = (first ? 0.3 : 0.5 + Math.random()) * starGap * 1000;
+  starTimer = setTimeout(() => { if (document.visibilityState === 'visible' && view === 'burrow' && scene === 'hill') shootingStar(); scheduleStar(); }, wait);
+}
+function shootingStar() {
+  const st = $('stage'); if (!st || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const s = document.createElement('span'); s.className = 'shooting';
+  const rtl = Math.random() < 0.5;
+  s.style.left = (rtl ? 55 + Math.random() * 35 : 5 + Math.random() * 35) + '%'; s.style.top = (6 + Math.random() * 22) + '%';
+  s.style.setProperty('--dir', rtl ? -1 : 1); s.style.setProperty('--len', (90 + Math.random() * 90) + 'px');
+  st.appendChild(s); setTimeout(() => s.remove(), 1400);
+  Snd.play('chirp', { pitch: 2.2 });
+  const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1);
+  if (!awake.length) return;
+  const i = E.rand(awake);
+  setTimeout(() => {
+    flash(i, 'surprised', 900);
+    say(i, E.rand(['a shooting star! quick, make a wish!', 'did you see that?! wish wish wish', 'i wished for more nights like this one', 'i won\u2019t tell you my wish. it\u2019s about cheese.']), 3600);
+    awake.filter(j => j !== i).forEach(j => setTimeout(() => flash(j, 'happy', 1600), 600));
+  }, 500);
+  if (E.keepsake(S, 'shootingstar', '🌠', 'saw the first shooting star over the hill', Date.now())) touch();
 }
 
 /* ---------------- daily wishes ---------------- */
