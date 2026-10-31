@@ -101,11 +101,17 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .stage[data-phase="night"] .being svg{filter:brightness(.82) saturate(.85)}
 .being .shadow{position:absolute;left:18%;right:18%;bottom:-4px;height:12px;border-radius:50%;background:rgba(30,40,20,.2);z-index:-1}
 .being.selected .shadow{background:color-mix(in srgb,var(--butter) 70%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--butter) 35%,transparent)}
+.eye-closed,.eye-happy,.brows,.mouth-o,.hat,.smudge,.scarf,.w{display:none}
 .being .eye-closed,.being .hat,.being .smudge,.being .scarf{display:none}
 .being.napping .eye-open{display:none}.being.napping .eye-closed{display:inline}
 .party .being .hat{display:inline}
 .being.muddy .smudge{display:inline}
-.eye-open{transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+.eye-open{transform-box:fill-box;transform-origin:center;transition:transform .06s}
+.being.blink .eye-open{transform:scaleY(.12)}
+.pupils{transform:translate(calc(var(--gx,0)*1px),calc(var(--gy,0)*1px));transition:transform .4s cubic-bezier(.3,.7,.3,1)}
+.being.happy:not(.napping) .eye-open{display:none}.being.happy:not(.napping) .eye-happy{display:inline}
+.being.worried:not(.napping):not(.happy) .brows{display:inline}
+.being.surprised .eye-open{transform:scale(1.2)}.being.surprised .mouth{display:none}.being.surprised .mouth-o{display:inline}
 .being.napping{animation:breathe 4.5s ease-in-out infinite}
 .being.glow svg{filter:drop-shadow(0 0 10px var(--butter)) drop-shadow(0 0 3px #fff)!important}
 .being.boing{animation:boing .9s cubic-bezier(.3,1.6,.5,1)}

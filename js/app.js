@@ -1,6 +1,7 @@
 // Presentation + orchestration: rendering, actions, sky/weather/season loop, sync loop.
 import { SPECIES, CHEESES, MONTHS, WEATHER_LINES, SEASON_LINES, WEARABLES, STAGES } from './data.js';
-import { art, eggArt } from './art.js';
+import { art, eggArt, genesOf } from './art.js';
+import { startLife, flash } from './life.js';
 import * as E from './engine.js';
 import { phaseAt, sunFor, fmtClock } from './sky.js';
 import { seasonal, decorKey } from './seasons.js';
@@ -31,6 +32,9 @@ const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZon
 
 /* ---------------- ui state ---------------- */
 const app = document.getElementById('app');
+let stopLife = null;
+const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
+let outfitLayers = () => null;
 let MB = null, mbErr = '', mailAll = false;
 let gamesOpen = false, scene = 'hill', arranging = false, pickSlot = '';
 let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
@@ -259,7 +263,7 @@ function renderBurrow() {
     <div class="row"><span id="syncpill" class="pill"></span><button class="ghost icon" id="snd" aria-pressed="${Snd.enabled}" aria-label="${Snd.enabled ? 'turn sound off' : 'turn sound on'}">${Snd.enabled ? '🔊' : '🔇'}</button><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
   </header>
   ${scene === 'room'
-  ? `<div class="stage room ${party ? 'party' : ''}" id="stage" data-phase="day">${R.roomHTML(S, { arranging, pick: pickSlot })}
+  ? `<div class="stage room ${party ? 'party' : ''}" id="stage" data-phase="day">${R.roomHTML(S, { arranging, pick: pickSlot, draw: drawBeing })}
       <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
       <button class="doorbtn" id="go-out">🚪 outside</button>
     </div>`
@@ -271,7 +275,7 @@ function renderBurrow() {
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
     <button class="doorbtn corner" id="go-in2">🏠 inside</button>
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
-    <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${art(b.sp)}<span class="shadow"></span></button>`).join('')}</div>
+    <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${drawBeing(b)}<span class="shadow"></span></button>`).join('')}</div>
   </div>`}
   <div id="below"></div>`;
   on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
@@ -287,6 +291,7 @@ function renderBurrow() {
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
   applyEnv(); paintSync(); update();
+  stopLife?.(); stopLife = startLife(S.beings.length, i => { const b = S?.beings[i]; if (!b) return null; const g = genesOf(b); return { napping: b.napping, temper: P.temperamentOf(b), joy: b.joy, eyeScale: g?.eyeScale }; });
 }
 function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
 function sessionSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
@@ -300,6 +305,7 @@ function update() {
     el.classList.toggle('napping', b.napping);
     el.classList.toggle('glow', !!(b.glowUntil && b.glowUntil > now));
     el.classList.toggle('muddy', b.clean < 35);
+    el.classList.toggle('worried', !b.napping && (b.full < 30 || b.clean < 30 || b.joy < 25));
     el.dataset.wear = b.wear || '';
     el.dataset.stage = E.stageOf(b);
     let z = el.querySelector('.zzz'); if (b.napping && !z) { z = document.createElement('span'); z.className = 'zzz'; z.textContent = 'z'; el.appendChild(z); } if (!b.napping && z) z.remove();
@@ -475,7 +481,7 @@ function feed(cid) {
   if (b.full >= 96) { cheeseOpen = false; update(); say(sel, 'so full. saving room for tomorrow.'); return; }
   cheeseOpen = false;
   care(sel, (s, x, now) => E.feed(s, x, c, now, D.dev), () => {
-    anim(sel, 'munch'); fx_(sel, '🧀', 1); Snd.play('munch'); Snd.buzz([8, 60, 8, 60, 8]);
+    anim(sel, 'munch'); flash(sel, 'happy', 1800); fx_(sel, '🧀', 1); Snd.play('munch'); Snd.buzz([8, 60, 8, 60, 8]);
     setTimeout(() => { fx_(sel, '💛', 3); say(sel, P.feedLine(S, S.beings[sel], cid === 'crumb' ? 'a tiny crumb' : cid)); }, 1000);
   });
 }
@@ -483,10 +489,10 @@ function act(kind) {
   const b = S.beings[sel];
   if (b.napping) { say(sel, 'zzz… (wake me first?)'); return; }
   if (kind === 'play') care(sel, (s, x, now) => E.play(s, x, now, D.dev), () => {
-    anim(sel, 'boing'); Snd.play('boing'); Snd.buzz([15, 300, 25]); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
+    anim(sel, 'boing'); flash(sel, 'surprised', 700); Snd.play('boing'); Snd.buzz([15, 300, 25]); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
     say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(P.T(S.beings[sel]).boing)); });
   if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
-    anim(sel, 'squish'); fx_(sel, '💗', 3); Snd.play('hug'); Snd.buzz([40]); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
+    anim(sel, 'squish'); flash(sel, 'happy', 1800); fx_(sel, '💗', 3); Snd.play('hug'); Snd.buzz([40]); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
 }
 function startGame(kind) {
   const i = sel, b = S.beings[i];
@@ -494,7 +500,7 @@ function startGame(kind) {
   if (b.napping) { say(i, 'zzz… (wake me first?)'); update(); return; }
   if (b.full < 10) { say(i, 'too hungry to play… snack first?'); update(); return; }
   update();
-  openGame(kind, { being: { name: E.first(b), art: art(b.sp).replace('<svg ', `<svg data-wear="${b.wear || ''}" `) },
+  openGame(kind, { being: { name: E.first(b), art: drawBeing(b).replace('<svg ', `<svg data-wear="${b.wear || ''}" `) },
     fx: { play: Snd.play, buzz: Snd.buzz },
     done: score => {
       let joy = 0;
@@ -507,7 +513,7 @@ function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
   const b = S.beings[i]; b.taps = (b.taps || 0) + 1;
   if (b.napping) say(i, 'zzz…');
-  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); fx_(i, '🤫', 1); Snd.play('secret'); }
+  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); flash(i, 'happy', 2000); fx_(i, '🤫', 1); Snd.play('secret'); }
   else { anim(i, 'squish'); Snd.play('tap'); Snd.buzz([6]); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); else if (env.sea.costume && b.taps % 7 === 2) say(i, E.rand(SEASON_LINES.costume)); }
   saveLocal();
 }
