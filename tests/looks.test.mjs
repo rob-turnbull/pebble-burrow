@@ -32,3 +32,14 @@ test('all sixteen species draw, with faces and room for outfits', async () => {
     const A = anchors({ id: 'id-' + sp, sp }); assert.ok(A.feet > A.t && A.rx > 0, sp);
   }
 });
+
+test('each burrow gets its own horizon, and one re-roll that sticks', async () => {
+  const HZ = await import('../js/horizon.js');
+  const E = await import('../js/engine.js');
+  const kinds = new Set(Array.from({ length: 200 }, (_, i) => HZ.horizonOf({ id: 'b' + i }).kind));
+  assert.equal(kinds.size, Object.keys(HZ.HORIZONS).length, 'every view turns up');
+  const s = E.newBurrow({ owner: 'Rob', species: ['fox', 'owl'] }, 1), first = HZ.horizonOf(s).kind;
+  assert.equal(HZ.reroll(s, 5), true); assert.notEqual(s.horizon.kind, first);
+  assert.equal(HZ.reroll(s, 6), false, 'only once');
+  for (const k of Object.keys(HZ.HORIZONS)) assert.match(HZ.horizonSVG({ kind: k, seed: 3 }), /<svg class="hz-svg"/);
+});

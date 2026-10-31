@@ -539,3 +539,27 @@ a.btn{text-decoration:none;color:var(--ink)}
 @keyframes greeted{30%{transform:scale(1.4) rotate(-10deg)}100%{transform:translateY(-80px) scale(.6);opacity:0}}
 @keyframes leave{to{transform:translateX(160px);opacity:0}}
 @keyframes shutter{from{opacity:.9}to{opacity:0}}
+
+/* ---------------- horizon ---------------- */
+.horizon{position:absolute;left:0;right:0;bottom:92px;height:42%;pointer-events:none;opacity:.9;transition:opacity 2s;
+  --far:color-mix(in srgb,var(--top) 45%,#5d6b86);--far2:color-mix(in srgb,var(--hill2) 55%,var(--top));--win:#ffe7a3;--snowcap:#ffffff00;--sea:color-mix(in srgb,var(--top) 60%,#4f86b8)}
+.hz-svg{width:100%;height:100%;display:block;filter:blur(.4px)}
+.stage[data-phase="night"] .horizon{--far:#363b66;--far2:#2c3d38;opacity:1}
+.stage[data-phase="dusk"] .horizon{--far:color-mix(in srgb,var(--top) 55%,#4a3f62)}
+.stage[data-season="winter"] .horizon,.c-freezing .horizon,.stage[data-wx="snow"] .horizon{--snowcap:#f4f8ff}
+.stage[data-wx="fog"] .horizon{opacity:.25}.stage[data-wx="rain"] .horizon,.stage[data-wx="storm"] .horizon{opacity:.6}
+.hz-win{opacity:.15;transition:opacity 2s}
+.stage[data-phase="night"] .hz-win,.stage[data-phase="dusk"] .hz-win{opacity:1;filter:drop-shadow(0 0 2px #ffe7a3)}
+.stage[data-phase="night"] .hz-beam{opacity:.25;animation:beam 6s linear infinite;transform-box:fill-box;transform-origin:100% 50%}
+.hz-bulbs{opacity:0}.stage[data-phase="night"] .hz-bulbs,.stage[data-phase="dusk"] .hz-bulbs{opacity:1;animation:twinkle 1.4s infinite}
+.hz-sails{animation:spin 14s linear infinite}.c-windy .hz-sails{animation-duration:4s}
+.hz-wheel{animation:spin 40s linear infinite}
+.hz-swing{animation:hzswing 3s ease-in-out infinite}
+.hz-flag{animation:flutter 1.6s ease-in-out infinite;transform-box:fill-box;transform-origin:0 50%}
+.hz-smoke{animation:steam 3s ease-in-out infinite}
+.hz-waves{animation:waves 5s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes hzswing{50%{transform:rotate(14deg)}}
+@keyframes beam{0%{transform:scaleX(1)}50%{transform:scaleX(-1)}100%{transform:scaleX(1)}}
+@keyframes waves{to{transform:translateX(-40px)}}
+@media (max-width:560px){.horizon{bottom:84px;height:36%}}

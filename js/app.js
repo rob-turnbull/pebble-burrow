@@ -18,6 +18,7 @@ import * as F from './friends.js';
 import * as GD from './garden.js';
 import * as V from './visitors.js';
 import * as PH from './photo.js';
+import * as HZ from './horizon.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -344,7 +345,7 @@ function renderBurrow() {
       <button class="snap" id="snap" aria-label="take a photo">📷</button>
     </div>`
   : `<div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
-    <div class="sky-dim"></div><div class="rainbow" aria-hidden="true"></div><div id="orb" class="orb"></div><div class="glare" aria-hidden="true"></div>
+    <div class="sky-dim"></div><div class="rainbow" aria-hidden="true"></div><div id="orb" class="orb"></div><div class="horizon" data-hz="${HZ.horizonOf(S).kind}">${HZ.horizonSVG(HZ.horizonOf(S))}</div><div class="glare" aria-hidden="true"></div>
     <div class="hill back"></div><button class="door" id="go-in" aria-label="go inside the burrow"><i></i></button><div class="hill"></div>
     <div class="grass" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="left:${4 + i * 11.5}%;animation-delay:-${(i * 0.37).toFixed(2)}s"></i>`).join('')}</div><div class="garden-hill" id="garden-hill"></div><div class="frost" aria-hidden="true"></div><div class="shimmer" aria-hidden="true"></div>
     <div class="decor" id="decor"></div>
@@ -737,6 +738,12 @@ function settingsHTML() {
   </section>
 
   <section class="panel">
+    <h2>your horizon</h2>
+    <p class="place-now">in the distance: <strong>${HZ.HORIZONS[HZ.horizonOf(S).kind].label}</strong></p>
+    ${HZ.horizonOf(S).rerolled ? '<p class="hint">you\u2019ve used your one re-roll. this view is yours now.</p>' : '<div class="row"><button class="btn" id="hz-reroll">try a different view (once)</button></div><p class="hint">every burrow gets its own view. you can swap it once, and the new one stays.</p>'}
+  </section>
+
+  <section class="panel">
     <h2>backup code</h2>
     <p class="hint">a copy of your whole burrow as text. handy without sync, or as an extra safety net.</p>
     <textarea id="s-code" readonly>${E.encode(S)}</textarea>
@@ -800,6 +807,7 @@ function wireSettings() {
 
   on('s-copy', () => copyField('s-code', 'code copied.', m => panelNote = m));
   on('s-restore', () => restoreCode($('s-in').value, null));
+  on('hz-reroll', () => { if (HZ.reroll(S)) { E.setField(S, 'horizon', S.horizon); touch(); panelNote = `new view: ${HZ.HORIZONS[S.horizon.kind].label}.`; renderBurrow(); } });
   on('s-reset', () => { confirmReset = true; update(); });
   on('s-no', () => { confirmReset = false; update(); });
   on('s-yes', () => { S = null; ls.del(K.state); ls.del(K.legacy); chosen = []; confirmReset = false; view = 'setup'; renderSetup(); });

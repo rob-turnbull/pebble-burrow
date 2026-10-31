@@ -10,7 +10,7 @@ export const NAP_AFTER_H = 10;                          // away this long -> eve
 export const WAKE_FLOOR = { full: 40, clean: 40, joy: 60 };
 const H = 36e5;
 const COUNTERS = ['feasts', 'hugs', 'boings'];
-const TOP_FIELDS = ['owner', 'bday', 'place', 'units', 'tz', 'helper'];
+const TOP_FIELDS = ['owner', 'bday', 'place', 'units', 'tz', 'helper', 'horizon'];
 
 export const clamp = v => Math.max(0, Math.min(100, v));
 export const rand = a => a[Math.floor(Math.random() * a.length)];
