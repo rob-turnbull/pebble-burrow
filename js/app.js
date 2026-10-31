@@ -4,7 +4,7 @@ import { art, eggArt, genesOf } from './art.js';
 import { startLife, flash } from './life.js';
 import * as E from './engine.js';
 import { phaseAt, sunFor, fmtClock } from './sky.js';
-import { seasonal, decorKey } from './seasons.js';
+import { seasonal, decorKey, EVENT_LABEL } from './seasons.js';
 import { fetchWeather, searchPlaces, locateMe, WeatherFX, kindIcon, KIND_LABEL, isCold, WEATHER_TTL } from './weather.js';
 import { GistSync } from './sync.js';
 import * as P from './personality.js';
@@ -154,7 +154,7 @@ function applyEnv() {
   paintDecor();
   const chip = $('wxchip');
   if (chip) {
-    const night = env.phase === 'night', ev = env.sea.costume ? ' · 🎃' : env.sea.events.includes('halloween') ? ' · spooky week' : '';
+    const night = env.phase === 'night', evk = env.sea.events.find(e => EVENT_LABEL[e] && e !== 'lights' && e !== 'newyear') || env.sea.events[0], ev = env.sea.costume ? ' · 🎃' : evk && EVENT_LABEL[evk] ? ' · ' + EVENT_LABEL[evk] : '';
     chip.innerHTML = env.wx
       ? `<span>${kindIcon(env.kind, night)} ${env.wx.temp}°${S.units}</span><span class="muted">${esc(S.place.name)} · ${env.phase}${ev}</span>`
       : `<span>${night ? '🌙' : '☀️'} ${env.phase}${ev}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
@@ -245,6 +245,12 @@ function earnEnvKeepsakes() {
   if (E.isBirthday(S)) got = E.keepsake(S, 'bday:' + y, '🎂', `your birthday, ${y}. they knew. the party hat is yours to keep`, now) || got;
   if (env.sea.events.includes('lights')) got = E.keepsake(S, 'lights:' + (new Date().getMonth() === 0 ? y - 1 : y), '✨', 'the winter lights went up on the door', now) || got;
   if (env.sea.events.includes('newyear')) got = E.keepsake(S, 'newyear:' + y, '🎆', `a new year together, ${y}`, now) || got;
+  if (env.sea.events.includes('harvest')) got = E.keepsake(S, 'harvest:' + y, '🌾', `the harvest festival, ${y}`, now) || got;
+  if (env.sea.events.includes('fireworks')) got = E.keepsake(S, 'fireworks:' + (new Date().getMonth() === 0 ? y - 1 : y), '🎆', `watched the new year\u2019s fireworks together`, now) || got;
+  if (env.sea.events.includes('blossom')) got = E.keepsake(S, 'blossom:' + y, '🌸', `blossom time, ${y}`, now) || got;
+  if (env.sea.events.includes('picnic')) got = E.keepsake(S, 'picnic:' + y, '🧺', `a summer picnic on the hill, ${y}`, now) || got;
+  // the first snow of each winter is a celebration
+  if (env.kind === 'snow') { const w = new Date().getMonth() < 6 ? y - 1 : y; if (E.keepsake(S, 'firstsnow:' + w, '☃️', `the first snow of winter ${w}–${String(w + 1).slice(2)}`, now)) { got = true; setTimeout(() => { confetti(['#ffffff', '#dfefff', '#bcdaf3']); S.beings.forEach((b, i) => { if (!b.napping) { fx_(i, '❄️', 2); flash(i, 'surprised', 900); } }); const i = S.beings.findIndex(b => !b.napping); if (i > -1) say(i, E.rand(SEASON_LINES.firstsnow), 4200); }, 1500); } }
   if (got) touch();
 }
 
@@ -258,9 +264,33 @@ function paintDecor() {
     if (night) h += `<span class="bat" style="top:18%;animation-delay:0s">🦇</span><span class="bat" style="top:30%;animation-delay:-4s;animation-duration:11s">🦇</span>`;
   }
   if (env.sea.events.includes('lights')) h += `<span class="lights"></span>`;
+  if (env.sea.events.includes('harvest')) h += `<span class="hay" style="left:5%"></span><span class="hay sm" style="left:14%"></span><span class="bunting"></span><span class="corn" style="right:22%">🌽</span>`;
+  if (env.sea.events.includes('blossom')) h += `<span class="blossom-tree"></span>`;
+  if (env.sea.events.includes('picnic')) h += `<span class="picnic"><i>🧺</i><i>🍓</i><i>🧀</i></span>`;
+  if (env.sea.events.includes('fireworks') && night) h += `<canvas class="fireworks" id="fireworks"></canvas>`;
   const drift = { autumn: ['🍂', '🍁'], spring: ['🌸', '🌸'] }[env.sea.season];
   if (drift) for (let i = 0; i < 6; i++) h += `<span class="drift" style="left:${8 + i * 15}%;animation-delay:-${i * 2.3}s;animation-duration:${10 + (i % 3) * 3}s">${drift[i % 2]}</span>`;
   layer.innerHTML = h;
+  const fw = $('fireworks'); if (fw) startFireworks(fw);
+}
+function startFireworks(cv) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const g = cv.getContext('2d'), parts = []; let last = 0;
+  const size = () => { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }; size();
+  const cols = ['#f6cf4f', '#e57fa8', '#7fb8d6', '#86c46f', '#ffffff', '#eb9459'];
+  const loop = t => {
+    if (!cv.isConnected) return;
+    if (document.visibilityState === 'visible') {
+      if (t - last > 1100 + Math.random() * 900) { last = t; const x = cv.width * (0.15 + Math.random() * 0.7), y = cv.height * (0.12 + Math.random() * 0.3), c = cols[Math.floor(Math.random() * cols.length)];
+        for (let i = 0; i < 64; i++) { const a = i / 64 * 6.283, v = 1.6 + Math.random() * 2.2; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, c }); }
+        if (Math.random() < 0.6) Snd.play('thunder'); }
+      g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.34)'; g.fillRect(0, 0, cv.width, cv.height); g.globalCompositeOperation = 'lighter';   // fading trails
+      for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.vx *= 0.97; p.vy *= 0.97; p.life -= 0.017; if (p.life <= 0) { parts.splice(i, 1); continue; } g.globalAlpha = p.life; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, 2.4, 0, 6.283); g.fill(); }
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }
 
 /* ---------------- setup ---------------- */
@@ -697,7 +727,7 @@ let lastBubble = 0;
 function bubble(x, y) { if (Date.now() - lastBubble > 140) { lastBubble = Date.now(); Snd.play('bubble'); } const st = $('stage'); const s = document.createElement('span'); s.className = 'bubble'; s.style.left = (x - 7 + (Math.random() * 20 - 10)) + 'px'; s.style.top = (y - 7) + 'px'; st.appendChild(s); setTimeout(() => s.remove(), 1300); }
 function sparkle(i) { update(); fx_(i, '✨', 4); Snd.play('sparkle'); Snd.buzz([10, 40, 10]); }
 function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; if (S?.beings[i]) Snd.play('chirp', { pitch: Snd.voiceOf(S.beings[i].sp) }); el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
-function confetti() { const st = $('stage'); const cols = seasonal().costume ? ['#f08a24', '#6b3fa0', '#2b2230', '#f6cf4f'] : ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
+function confetti(custom) { const st = $('stage'); if (!st || matchMedia('(prefers-reduced-motion: reduce)').matches) return; const cols = custom || seasonal().costume ? ['#f08a24', '#6b3fa0', '#2b2230', '#f6cf4f'] : ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
   for (let k = 0; k < 40; k++) { const c = document.createElement('span'); c.className = 'confetti'; c.style.left = Math.random() * 100 + '%'; c.style.background = E.rand(cols); c.style.animationDelay = (Math.random() * 1.2) + 's'; st.appendChild(c); setTimeout(() => c.remove(), 4200); } }
 
 /* ---------------- settings ---------------- */

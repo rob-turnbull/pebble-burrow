@@ -53,3 +53,14 @@ test('winter lights wrap the new year; seasons flip in the southern hemisphere',
   assert.equal(seasonOf(new Date(2026, 9, 30), 45.5), 'autumn');
   assert.equal(seasonOf(new Date(2026, 9, 30), -33.9), 'spring');
 });
+
+test('more seasonal events: harvest, fireworks, blossoms, picnics', () => {
+  assert.ok(seasonal(new Date(2026, 10, 20)).events.includes('harvest'));
+  assert.ok(!seasonal(new Date(2026, 10, 5)).events.includes('harvest'));
+  assert.ok(seasonal(new Date(2026, 11, 31, 21)).events.includes('fireworks'));
+  assert.ok(!seasonal(new Date(2026, 11, 31, 12)).events.includes('fireworks'), 'evening only');
+  assert.ok(seasonal(new Date(2027, 3, 10)).events.includes('blossom'));
+  assert.ok(seasonal(new Date(2026, 9, 10), -33.9).events.includes('blossom'), 'southern spring');
+  assert.ok(seasonal(new Date(2027, 6, 17, 13)).events.includes('picnic'), 'summer saturday afternoon');
+  assert.ok(!seasonal(new Date(2027, 6, 14, 13)).events.includes('picnic'), 'not on a wednesday');
+});

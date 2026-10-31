@@ -69,5 +69,10 @@ export const SEASON_LINES = {
   winter:    ['the lights make the door look cosy', 'winter is just a long nap season'],
   spring:    ['the petals are tickling my nose', 'everything smells green'],
   summer:    ['warm grass, big naps', 'the hill is all buzzy'],
-  newyear:   ['new year! same burrow. best burrow.']
+  newyear:   ['new year! same burrow. best burrow.'],
+  harvest:   ['harvest festival! the hay smells like sunshine', 'i made a corn dolly. it looks like you.', 'thankful for cheese. and you. mostly you.'],
+  fireworks: ['FIREWORKS! the sky is sparkling!', 'make a wish for next year!', 'boom! (i jumped a bit)'],
+  blossom:   ['the blossoms are out! everything is pink', 'a petal landed on my nose. i\u2019m keeping it.'],
+  picnic:    ['picnic day! i packed the cheese.', 'there are ants. they\u2019re invited.'],
+  firstsnow: ['FIRST SNOW! everybody outside!', 'the whole hill is a pillow now']
 };
