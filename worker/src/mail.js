@@ -1,7 +1,7 @@
 // Postcards between burrows. Anyone with your *mailbox* address can knock; only approved friends get in.
 // Your mailbox key is separate from your access key, so sharing it never exposes your burrow.
-export const LIMITS = { name: 40, note: 140, doodle: 60000, perSenderPerDay: 10, keep: 200 };
-const DOODLE = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
+export const LIMITS = { name: 40, note: 140, doodle: 120000, perSenderPerDay: 10, keep: 200 };
+const DOODLE = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/;
 const ADDRESS = /^https:\/\/[^\s/]+\/mail\/[A-Za-z0-9_-]{16,}$/;
 
 export const isAddress = a => ADDRESS.test(String(a || '').trim());
@@ -29,7 +29,7 @@ export function validate(body) {
   if (!isAddress(reply)) return { error: 'a postcard needs the sender’s own mailbox address', status: 400 };
   if (!note && !doodle) return { error: 'a postcard needs a note or a doodle', status: 400 };
   if (note.length > LIMITS.note) return { error: `notes are ${LIMITS.note} characters at most`, status: 413 };
-  if (doodle && (!DOODLE.test(doodle) || doodle.length > LIMITS.doodle)) return { error: 'the doodle must be a small PNG', status: 413 };
+  if (doodle && (!DOODLE.test(doodle) || doodle.length > LIMITS.doodle)) return { error: 'the picture must be a small PNG or JPEG', status: 413 };
   return { card: { from: { name, reply, burrow: String(from.burrow || '').slice(0, 60) }, note, doodle, being } };
 }
 

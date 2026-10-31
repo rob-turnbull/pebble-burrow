@@ -2,6 +2,7 @@
 // Nothing here ever dies: an empty tummy or a long absence only ever means a nap.
 import { FIRST, LAST, STAGES } from './data.js';
 import { mergeGarden } from './garden.js';
+import { mergeVisitors } from './visitors.js';
 
 export const SCHEMA = 3;
 export const RATE = { full: 5, clean: 2.5, joy: 3.5 }; // points lost per hour while awake
@@ -268,6 +269,7 @@ export function merge(a, b) {
   out.wxDays = { ...(b.wxDays || {}), ...(out.wxDays || {}) };
   out.room = out.room || {};
   mergeGarden(out, b);
+  mergeVisitors(out, b);
   out.bond = { ...(out.bond || {}) }; for (const [dev, n] of Object.entries(b.bond || {})) out.bond[dev] = Math.max(out.bond[dev] || 0, n);
   const fr = new Map((out.friends || []).map(f => [f.addr, f]));
   (b.friends || []).forEach(f => { if ((f.at || 0) > (fr.get(f.addr)?.at || 0)) fr.set(f.addr, clone(f)); });

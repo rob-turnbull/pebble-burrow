@@ -1,6 +1,6 @@
 // Postcards: the composer (note + doodle) and how a card is drawn.
 const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-export const safeDoodle = d => /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(d || '') ? d : '';
+export const safeDoodle = d => /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(d || '') ? d : '';
 const INK = ['#2f2a3a', '#e57fa8', '#f08a24', '#86c46f', '#7fb8d6'];
 
 export function cardHTML(c, { mine = false } = {}) {
@@ -16,7 +16,7 @@ export function cardHTML(c, { mine = false } = {}) {
 /**
  * Open the composer. friends: [{addr,name}], beings: [{name}], send(card, to) -> Promise<string>
  */
-export function compose({ friends, beings, me, send, addFriend, isAddress, fx }) {
+export function compose({ friends, beings, me, send, addFriend, isAddress, fx, image }) {
   const root = document.createElement('div'); root.className = 'modal';
   root.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="write a postcard">
     <div class="sheet-top"><strong>💌 write a postcard</strong><button class="ghost" data-close>close</button></div>
@@ -43,12 +43,14 @@ export function compose({ friends, beings, me, send, addFriend, isAddress, fx })
   const pad = $('pc-pad'), g = pad.getContext('2d'); let ink = INK[0], drawn = false, down = false, last = null;
   const blank = () => { g.fillStyle = '#fffaf0'; g.fillRect(0, 0, pad.width, pad.height); drawn = false; };
   blank(); g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 6;
+  let photo = false;
+  if (image) { const im = new Image(); im.onload = () => { const s = Math.max(pad.width / im.width, pad.height / im.height); g.drawImage(im, (pad.width - im.width * s) / 2, (pad.height - im.height * s) / 2, im.width * s, im.height * s); photo = true; drawn = true; }; im.src = image; }
   const pt = e => { const r = pad.getBoundingClientRect(); return [(e.clientX - r.left) * pad.width / r.width, (e.clientY - r.top) * pad.height / r.height]; };
   pad.onpointerdown = e => { down = true; last = pt(e); pad.setPointerCapture(e.pointerId); g.fillStyle = ink; g.beginPath(); g.arc(last[0], last[1], 3, 0, 7); g.fill(); drawn = true; };
   pad.onpointermove = e => { if (!down) return; const p = pt(e); g.strokeStyle = ink; g.beginPath(); g.moveTo(...last); g.lineTo(...p); g.stroke(); last = p; drawn = true; };
   pad.onpointerup = pad.onpointercancel = () => { down = false; };
   root.querySelectorAll('[data-ink]').forEach(b => b.onclick = () => { ink = b.dataset.ink; root.querySelectorAll('.ink').forEach(x => x.classList.toggle('on', x === b)); });
-  $('pc-clear').onclick = blank;
+  $('pc-clear').onclick = () => { blank(); photo = false; };
 
   $('pc-send').onclick = async () => {
     const msg = $('pc-msg'), note = $('pc-note').value.trim();
@@ -59,7 +61,7 @@ export function compose({ friends, beings, me, send, addFriend, isAddress, fx })
       if (!isAddress(to)) { msg.textContent = 'that doesn’t look like a mailbox address. it ends in /mail/ and a long code.'; return; }
     }
     if (!note && !drawn) { msg.textContent = 'write a note or draw something first.'; return; }
-    const doodle = drawn ? shrink(pad) : '';
+    const doodle = drawn ? (photo ? pad.toDataURL('image/jpeg', 0.78) : shrink(pad)) : '';
     const bi = +$('pc-being').value;
     $('pc-send').disabled = true; msg.textContent = 'sending…';
     try {

@@ -16,6 +16,8 @@ import * as O from './outfits.js';
 import { writeDiary, awayLabel } from './diary.js';
 import * as F from './friends.js';
 import * as GD from './garden.js';
+import * as V from './visitors.js';
+import * as PH from './photo.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -40,7 +42,7 @@ const app = document.getElementById('app');
 let stopLife = null;
 const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
 const outfits = {};
-const diaryHooks = [F.diaryMoments, GD.diaryGarden];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
+const diaryHooks = [F.diaryMoments, GD.diaryGarden, V.diaryVisitors];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
 let DIARY = (() => { try { return JSON.parse(localStorage.getItem('pebble-burrow-diary')); } catch { return null; } })();
 let outfitLayers = b => O.layersFor(b, outfits[b.id], env.c);
 let MB = null, mbErr = '', mailAll = false;
@@ -339,6 +341,7 @@ function renderBurrow() {
   ? `<div class="stage room ${party ? 'party' : ''}" id="stage" data-phase="day">${R.roomHTML(S, { arranging, pick: pickSlot, draw: drawBeing })}
       <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
       <button class="doorbtn" id="go-out">🚪 outside</button>
+      <button class="snap" id="snap" aria-label="take a photo">📷</button>
     </div>`
   : `<div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
     <div class="sky-dim"></div><div class="rainbow" aria-hidden="true"></div><div id="orb" class="orb"></div><div class="glare" aria-hidden="true"></div>
@@ -348,6 +351,7 @@ function renderBurrow() {
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
     <button class="doorbtn corner" id="go-in2">🏠 inside</button>
+    <button class="snap" id="snap" aria-label="take a photo">📷</button>
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
     <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${drawBeing(b)}<span class="shadow"></span></button>`).join('')}</div>
   </div>`}
@@ -357,6 +361,7 @@ function renderBurrow() {
   on('wxchip', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   const stage = $('stage');
   if (scene === 'hill') { fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900); } else fx = null;
+  on('snap', takePhoto);
   const goIn = () => { scene = 'room'; washMode = false; spongeEl = null; Snd.play('tap'); renderBurrow(); };
   on('go-in', goIn); on('go-in2', goIn);
   on('go-out', () => { scene = 'hill'; arranging = false; pickSlot = ''; spongeEl = null; Snd.play('tap'); renderBurrow(); });
@@ -417,7 +422,9 @@ function update() {
   </section>
   ${postHTML()}
   ${scene === 'room' ? roomPanelHTML() : ''}
+  ${visitorBookHTML()}
   ${albumHTML()}
+  ${photosHTML()}
   ${installHTML()}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
@@ -439,6 +446,7 @@ function update() {
   below.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { const h = parseHelper(S.helper); try { await mailAction(h, 'delete', { id: b.dataset.del }); MB.cards = MB.cards.filter(c => c.id !== b.dataset.del); } catch (e) { mbErr = e.message; } update(); });
   below.querySelectorAll('[data-req]').forEach(b => b.onclick = async () => { const h = parseHelper(S.helper), [act, sid] = b.dataset.req.split(':');
     try { await mailAction(h, act, { sid }); const r = MB.requests.find(x => x.sid === sid); if (act === 'approve' && r) E.setFriend(S, r.reply, r.name); await loadMail(true); touch(); } catch (e) { mbErr = e.message; } update(); });
+  below.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => viewPhoto(b.dataset.photo));
   on('arrange', () => { arranging = !arranging; pickSlot = ''; renderBurrow(); });
   below.querySelectorAll('[data-place]').forEach(p => p.onclick = () => { R.place(S, pickSlot, p.dataset.place); pickSlot = ''; Snd.play('tap'); touch(); renderBurrow();
     const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
@@ -508,9 +516,10 @@ async function loadMail(force = false) {
   if (view === 'burrow' && !busyTyping() && !washMode) update();
 }
 
-function writePostcard() {
+function writePostcard(image) {
   if (!MB?.address) return;
-  Post.compose({
+  if (typeof image !== 'string') image = undefined;
+  Post.compose({ image,
     friends: (S.friends || []).filter(f => !f.gone), beings: S.beings.map(b => ({ name: E.first(b) })), me: S.owner,
     isAddress: isMailAddress, fx: Snd,
     addFriend: (addr, name) => { E.setFriend(S, addr, name); touch(); },
@@ -918,6 +927,81 @@ function feedSnack(item) {
   });
 }
 
+/* ---------------- visitors ---------------- */
+let visitorEl = null;
+function visitorCheck(force = false) {
+  if (!S || view !== 'burrow' || scene !== 'hill' || visitorEl || document.visibilityState !== 'visible' || document.querySelector('.modal')) return;
+  const luck = GD.stock(S).clover ? 1.6 : 1;
+  const id = force ? (V.eligible(env.c || {}, S)[0]?.id) : V.maybeVisit(env.c, S, Math.random, luck);
+  if (id) showVisitor(id);
+}
+function showVisitor(id) {
+  const st = $('stage'); if (!st) return;
+  const v = V.VISITORS[id], flying = ['butterfly', 'fireflies', 'snowowl', 'bee', 'robin'].includes(id);
+  const b = document.createElement('button'); b.className = 'visitor' + (flying ? ' flying' : ''); b.dataset.v = id;
+  b.textContent = v.e; b.setAttribute('aria-label', `a ${v.label} is visiting. tap to say hello`);
+  b.style.left = (12 + Math.random() * 66) + '%'; if (flying) b.style.top = (18 + Math.random() * 22) + '%';
+  b.onclick = () => greetVisitor(id); st.appendChild(b); visitorEl = b;
+  const i = S.beings.findIndex(x => !x.napping); if (i > -1) setTimeout(() => say(i, E.rand([`look! a ${v.label}!`, 'we have a visitor!', `oh! is that a ${v.label}?`]), 3000), 600);
+  b._leave = setTimeout(() => { b.classList.add('leaving'); setTimeout(() => { b.remove(); if (visitorEl === b) visitorEl = null; }, 900); }, 90e3);
+}
+function greetVisitor(id) {
+  const v = V.VISITORS[id], el = visitorEl; if (!el) return;
+  clearTimeout(el._leave);
+  const r = V.greet(S, id, D.dev);
+  if (r.first) E.keepsake(S, 'visitor:' + id, v.e, `first visit from a ${v.label}`, Date.now());
+  if (r.gift) GD.giveSnack(S, r.gift, 1, D.dev);
+  Snd.play('sparkle'); Snd.buzz([10, 40, 10]);
+  const i = S.beings.findIndex(x => !x.napping);
+  if (i > -1) { say(i, E.rand(v.hello) + (r.gift ? ` (it left ${r.gift === 'clover' ? 'a lucky clover' : 'a ' + r.gift}!)` : ''), 4200); flash(i, 'happy', 2000); }
+  el.classList.add('greeted'); setTimeout(() => { el.remove(); if (visitorEl === el) visitorEl = null; }, 1400);
+  touch(); update();
+}
+function visitorBookHTML() {
+  const met = Object.keys(V.VISITORS).filter(id => V.timesMet(S, id) > 0);
+  if (!met.length) return `<section class="feasts book"><div class="row between"><h2>visitor book</h2><span class="hint">0 of ${Object.keys(V.VISITORS).length}</span></div><p class="hint">little visitors drop by depending on the time and the weather. tap one to say hello.</p></section>`;
+  return `<section class="feasts book"><div class="row between"><h2>visitor book</h2><span class="hint">${met.length} of ${Object.keys(V.VISITORS).length}</span></div>
+    <ul class="book-grid">${Object.entries(V.VISITORS).map(([id, v]) => { const n = V.timesMet(S, id);
+      return n ? `<li><span class="b-e">${v.e}</span><span>${esc(v.label)}</span><span class="hint">×${n}</span></li>` : `<li class="unmet" title="${esc(v.hint)}"><span class="b-e">❔</span><span class="hint">${esc(v.hint)}</span></li>`; }).join('')}</ul></section>`;
+}
+
+/* ---------------- photos ---------------- */
+let snapping = false;
+async function takePhoto() {
+  const st = $('stage'); if (!st || snapping) return; snapping = true;
+  S.beings.forEach((b, i) => { if (!b.napping) flash(i, 'happy', 1600); });
+  const i = S.beings.findIndex(x => !x.napping); if (i > -1) say(i, 'say cheese!', 1200);
+  await new Promise(r => setTimeout(r, 1250));
+  st.querySelectorAll('.say').forEach(x => x.remove());
+  const cap = `${S.owner}${/s$/i.test(S.owner) ? "'" : "'s"} burrow · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  let data = '';
+  try { data = await PH.snapshot(st, cap); } catch (e) { snapping = false; return; }
+  const fl = document.createElement('div'); fl.className = 'shutter'; st.appendChild(fl); setTimeout(() => fl.remove(), 600);
+  Snd.play('shutter'); Snd.buzz([20]);
+  PH.add({ id: Date.now().toString(36), t: Date.now(), data, wx: env.c?.kind || '' });
+  if (E.keepsake(S, 'photo:first', '📷', 'the first photo on the hill', Date.now())) touch();
+  snapping = false; update();
+}
+function photosHTML() {
+  const ps = PH.list();
+  return `<section class="feasts photos"><div class="row between"><h2>photos</h2><span class="hint">${ps.length ? `${ps.length} on this device` : 'tap 📷 on the hill'}</span></div>
+    ${ps.length ? `<div class="photo-grid">${ps.map(p => `<button class="thumb" data-photo="${p.id}" aria-label="photo from ${new Date(p.t).toLocaleString()}"><img src="${p.data}" alt=""></button>`).join('')}</div>
+      <p class="hint">photos stay on this device (up to ${12}). save the ones you love.</p>` : ''}</section>`;
+}
+function viewPhoto(id) {
+  const p = PH.list().find(x => x.id === id); if (!p) return;
+  const root = document.createElement('div'); root.className = 'modal';
+  root.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="photo"><div class="sheet-top"><strong>${new Date(p.t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong><button class="ghost" data-close>close</button></div>
+    <img class="photo-big" src="${p.data}" alt="the hill">
+    <div class="row"><a class="btn" download="pebble-burrow-${p.id}.jpg" href="${p.data}">save to device</a>${MB?.address ? '<button class="btn" data-send>💌 send as a postcard</button>' : ''}<button class="btn danger" data-del>delete</button></div></div>`;
+  document.body.appendChild(root);
+  root.querySelector('[data-close]').onclick = () => root.remove();
+  root.querySelector('[data-del]').onclick = () => { PH.remove(id); root.remove(); update(); };
+  const sendB = root.querySelector('[data-send]');
+  if (sendB) sendB.onclick = async () => { const img = await PH.shrink(p.data); root.remove(); writePostcard(img); };
+  root.addEventListener('keydown', e => { if (e.key === 'Escape') root.remove(); });
+}
+
 function chatter() {
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
@@ -957,6 +1041,8 @@ async function boot() {
   setInterval(tick, 30e3);
   setInterval(() => { if (S && document.visibilityState === 'visible') loadMail(); }, 5 * 60e3);
   setInterval(chatter, 80e3);
+  setInterval(() => visitorCheck(), 4 * 60e3);
+  setTimeout(() => visitorCheck(), 15e3);
   setInterval(() => { if (S && view === 'burrow' && document.visibilityState === 'visible' && !washMode && !document.querySelector('.modal') && Math.random() < 0.55) together(); }, 95e3);
   setInterval(weatherLife, 3500);
   setInterval(() => refreshWeather(), 10 * 60e3);

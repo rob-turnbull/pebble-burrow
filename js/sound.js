@@ -63,6 +63,7 @@ const SOUNDS = {
   miss()    { tone({ type: 'triangle', f0: 330, f1: 262, dur: 0.18, vol: 0.1 }); },
   note({ i = 0 } = {}) { tone({ type: 'triangle', f0: [392, 494, 587, 698][i % 4], dur: 0.32, vol: 0.18 }); },
   thunder() { noise({ dur: 2.2, vol: 0.5, freq: 160, q: 0.7 }); noise({ t: 0.15, dur: 1.6, vol: 0.3, freq: 90, q: 0.5 }); },
+  shutter() { noise({ dur: 0.05, vol: 0.4, freq: 3000, q: 0.8, type: 'highpass' }); noise({ t: 0.08, dur: 0.06, vol: 0.3, freq: 2400, q: 0.8, type: 'highpass' }); },
   post()    { [659, 880].forEach((f, i) => tone({ type: 'sine', f0: f, t: i * 0.12, dur: 0.4, vol: 0.14 })); }
 };
 

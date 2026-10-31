@@ -95,6 +95,34 @@ Tap the door or **🏠 inside**. Napping beings sleep in the bed, and the window
 
 Needs your helper (see below). Settings shows **your mailbox address**, which is safe to give friends because it can only receive postcards. Tap **💌 write one** for a note (140 characters) and a doodle. A new sender waits until you say yes, and "no thanks" removes their cards and stops future ones. Each person can send 10 a day at most. Your first card from each friend goes in the album, and the first one unlocks a painting for the room.
 
+## Every pet is an individual
+
+Each pet is drawn from its own "genes", picked from its id so every device agrees: a slight colour shift, one of seven eye styles, eye size and spacing, markings (spots, freckles, stripes, a patch, a blaze or socks), cheek colour, mouth and size. They blink on their own random rhythm (sleepy pets slowly, bouncy ones quickly, sometimes twice), glance around, at each other and at your finger, squint happily after hugs, look worried when hungry, and go wide-eyed mid-boing.
+
+## Weather they live in
+
+Set your town and the hill shows the real weather, and the **weather report** card gives temperature, feels-like, wind and gusts, humidity, the day's high and low, UV, sunrise and sunset, the next six hours, and a forecast from each pet in their own voice. Wind sways the grass, heat shimmers, frost creeps in and breath puffs in the cold, and rainbows follow the rain.
+
+The pets dress and act for it: raincoats, rain hats, umbrellas (which flip inside out in the wind), puddle splashing, beanies, earmuffs, puffy coats, cocoa, snowballs and tiny snowmen, sunhats, sunglasses, ice lollies, fans and beach towels, kites and capes in the wind, lanterns, flashlights, firefly jars and nightcaps after dark, and blanket forts in storms. Choices are random but always appropriate (no coats in summer, no sunglasses at night), tilted by temperament and species (frogs skip the raincoat and head for the puddle), steady for half an hour, and re-chosen when the weather changes.
+
+## While you were away
+
+Gone for 45 minutes or more? A short diary shows what they got up to: temperament quirks, rainy-day boats, snow angels, naps when tummies ran empty, moments together, the garden ripening, and passing visitors.
+
+## Friends
+
+The pets' friendship grows from the days you care for both, from moments on the hill (tag, whispers, sharing snacks, stargazing, huddling in storms, umbrella squabbles) and from **play together** in the games menu. Five levels, each kept in the album; best friends sometimes wear matching hats.
+
+## The garden
+
+Three plots for carrots, clover, strawberries, sunflowers and pumpkins (by season). Rain waters them, sun speeds them up, nights slow them, frost pauses them, and dry soil just waits. Water by hand any time, pick ripe plants into the pantry, and feed homegrown snacks from the feed menu. Sunflowers unlock a vase for the room.
+
+## Visitors and photos
+
+Twelve little visitors drop by when the time and weather suit them: a snail mail carrier, a lost duckling in the rain, a frog choir on rainy evenings, fireflies on warm nights, a snowy owl, butterflies, bees and ladybirds for the garden, an autumn squirrel, a dusk hedgehog, a robin and a very rare cat. Tap to say hello; some leave gifts. Clover in the pantry makes visits likelier. The **visitor book** shows who you've met and hints at the rest.
+
+Tap 📷 on the hill or in the room to take a photo (they say cheese). Photos stay on the device (the last 12); save them, or send one as a postcard and doodle on top.
+
 ## Updating
 
 Edit files, commit, push. Then bump `VERSION` in `sw.js` (e.g. `v2.0.1`) so installed copies fetch the new files. They update the next time they open.
@@ -119,6 +147,14 @@ js/sound.js           synthesised sounds, ambience, haptics
 js/games.js           the three mini-games
 js/room.js            inside the burrow: furniture, slots, favourite spots
 js/post.js            postcard composer and cards
+js/life.js            blinking, glances and expressions
+js/conditions.js      what the weather feels like to the pets
+js/outfits.js         weather outfits, props and behaviours
+js/diary.js           the while-you-were-away diary
+js/friends.js         friendship and moments together
+js/garden.js          the weather garden and pantry
+js/visitors.js        visitors and the visitor book
+js/photo.js           photo mode
 js/app.js             rendering, actions, loops
 worker/               the optional Cloudflare helper (nudges + AI visitor)
 tests/                node --test unit tests
@@ -130,7 +166,7 @@ tests/                node --test unit tests
 npm test     # or: node --test tests/*.test.mjs
 ```
 
-54 tests cover personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
+78 tests cover individual looks, outfit appropriateness (5,000 random cases), the weather model, the away diary, friendship, the garden, visitors, photo postcards, and personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
 
 ## Local preview
 

@@ -70,6 +70,7 @@ export function harvest(s, i, dev = 'here', now = Date.now()) {
 function add(s, side, item, n, dev) { s.pantry[side][item] = s.pantry[side][item] || {}; s.pantry[side][item][dev] = (s.pantry[side][item][dev] || 0) + n; }
 const sum = o => Object.values(o || {}).reduce((a, n) => a + n, 0);
 export function stock(s) { ensure(s); const out = {}; for (const k of Object.keys(SEEDS)) { const n = sum(s.pantry.gain[k]) - sum(s.pantry.use[k]); if (n > 0) out[k] = n; } return out; }
+export function giveSnack(s, item, n = 1, dev = 'here') { ensure(s); add(s, 'gain', item, n, dev); }
 export function useSnack(s, item, dev = 'here') { if ((stock(s)[item] || 0) < 1) return false; add(s, 'use', item, 1, dev); return true; }
 
 /** Merge two gardens: each plot keeps its newest change; pantry counts per device. */

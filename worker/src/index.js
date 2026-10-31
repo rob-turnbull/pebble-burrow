@@ -196,7 +196,7 @@ export default {
       if (!env.MAILBOX_KEY || !sameKey(mail[1], env.MAILBOX_KEY)) return new Response(JSON.stringify({ error: 'no mailbox here' }), { status: 404, headers: { 'Content-Type': 'application/json', ...open } });
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: open });
       if (req.method !== 'POST') return new Response('this is a pebble burrow mailbox. postcards arrive here.', { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...open } });
-      if (+(req.headers.get('Content-Length') || 0) > 90000) return new Response(JSON.stringify({ error: 'that postcard is too big' }), { status: 413, headers: { 'Content-Type': 'application/json', ...open } });
+      if (+(req.headers.get('Content-Length') || 0) > 160000) return new Response(JSON.stringify({ error: 'that postcard is too big' }), { status: 413, headers: { 'Content-Type': 'application/json', ...open } });
       let body; try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'not a postcard' }), { status: 400, headers: { 'Content-Type': 'application/json', ...open } }); }
       const r = await Mail.receive(env.BURROW, body, Date.now(), (title, text, tag) => notifyOwner(env, title, text, tag));
       return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json', ...open } });
