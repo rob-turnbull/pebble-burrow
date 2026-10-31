@@ -495,3 +495,22 @@ button.door:focus-visible{outline:3px solid var(--butter);outline-offset:3px}
 .beings[data-pair="highfive"] .being{animation:boing .9s cubic-bezier(.3,1.6,.5,1)}
 @keyframes tagA{0%,100%{transform:translateX(0)}50%{transform:translateX(30px) rotate(6deg)}}
 @keyframes tagB{0%,100%{transform:translateX(0)}50%{transform:translateX(40px) rotate(-6deg)}}
+
+/* ---------------- garden ---------------- */
+.garden-hill{position:absolute;inset:auto 0 0 0;height:40px;pointer-events:none;z-index:1}
+.gplot{position:absolute;bottom:4px;width:34px;height:12px;border-radius:50%;background:#7a5536;box-shadow:inset 0 3px 0 #5e3f27}
+.gplot i{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);font-style:normal;font-size:20px;line-height:1;transform-origin:50% 100%;animation:grass 4s ease-in-out infinite}
+.gplot.dry i{filter:saturate(.5);transform:translateX(-50%) rotate(-14deg);animation:none}
+.gplot.ripe i{filter:drop-shadow(0 0 4px #f6cf4f);font-size:22px}
+.gplot.frost{background:#b9b4c6}
+.plots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.plot{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;border-radius:14px;background:var(--well);border:1.5px solid var(--line);text-align:center;min-width:0}
+.plot.ripe{border-color:var(--butter);background:color-mix(in srgb,var(--butter) 16%,var(--well))}
+.plot.dry{border-style:dashed}
+.plot-e{font-size:28px;line-height:1}
+.plot-t{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;font-size:13px}
+.plot-t .bar{width:100%;height:6px}
+.plot .seeds{grid-column:1/-1;justify-content:center}
+.plot .seeds small{opacity:.6}
+.cheese.snack{background:color-mix(in srgb,#86c46f 18%,var(--well))}
+@media (max-width:480px){.plots{grid-template-columns:1fr}.plot{flex-direction:row;text-align:left}.plot-t{align-items:flex-start}}

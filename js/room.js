@@ -25,6 +25,7 @@ export const FURNITURE = {
   lights:   { label: 'string lights', e: '✨', kinds: ['wall'],         hint: 'in the winter lights season',        unlock: s => has(s, 'lights:') },
   cake:     { label: 'birthday cake', e: '🎂', kinds: ['sill', 'floor'], hint: 'on your birthday',                  unlock: s => has(s, 'bday:') },
   painting: { label: 'painting',     e: '🖼️', kinds: ['wall'],          hint: 'when a postcard arrives',            unlock: s => has(s, 'post:') },
+  vase:     { label: 'sunflower vase', e: '🌻', kinds: ['sill', 'floor'], hint: 'grow sunflowers in the garden', unlock: s => has(s, 'harvest:sunflower') },
   clock:    { label: 'little clock', e: '🕰️', kinds: ['wall', 'sill'],  hint: 'after 14 days together',             unlock: s => Math.max(0, ...s.beings.map(b => b.days.length)) >= 14 }
 };
 const has = (s, prefix) => s.album.some(k => k.k.startsWith(prefix));

@@ -15,6 +15,7 @@ import { conditions, summary as wxSummary, icon as wxIcon } from './conditions.j
 import * as O from './outfits.js';
 import { writeDiary, awayLabel } from './diary.js';
 import * as F from './friends.js';
+import * as GD from './garden.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -39,7 +40,7 @@ const app = document.getElementById('app');
 let stopLife = null;
 const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
 const outfits = {};
-const diaryHooks = [F.diaryMoments];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
+const diaryHooks = [F.diaryMoments, GD.diaryGarden];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
 let DIARY = (() => { try { return JSON.parse(localStorage.getItem('pebble-burrow-diary')); } catch { return null; } })();
 let outfitLayers = b => O.layersFor(b, outfits[b.id], env.c);
 let MB = null, mbErr = '', mailAll = false;
@@ -342,7 +343,7 @@ function renderBurrow() {
   : `<div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
     <div class="sky-dim"></div><div class="rainbow" aria-hidden="true"></div><div id="orb" class="orb"></div><div class="glare" aria-hidden="true"></div>
     <div class="hill back"></div><button class="door" id="go-in" aria-label="go inside the burrow"><i></i></button><div class="hill"></div>
-    <div class="grass" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="left:${4 + i * 11.5}%;animation-delay:-${(i * 0.37).toFixed(2)}s"></i>`).join('')}</div><div class="frost" aria-hidden="true"></div><div class="shimmer" aria-hidden="true"></div>
+    <div class="grass" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="left:${4 + i * 11.5}%;animation-delay:-${(i * 0.37).toFixed(2)}s"></i>`).join('')}</div><div class="garden-hill" id="garden-hill"></div><div class="frost" aria-hidden="true"></div><div class="shimmer" aria-hidden="true"></div>
     <div class="decor" id="decor"></div>
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
@@ -363,7 +364,7 @@ function renderBurrow() {
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
-  applyEnv(); paintSync(); update();
+  applyEnv(); paintSync(); gardenTick(); update();
   stopLife?.(); stopLife = startLife(S.beings.length, i => { const b = S?.beings[i]; if (!b) return null; const g = genesOf(b); return { napping: b.napping, temper: P.temperamentOf(b), joy: b.joy, eyeScale: g?.eyeScale }; });
 }
 function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -403,13 +404,14 @@ function update() {
       <button class="act" id="a-hug"><span class="ic">🫶</span>hug</button>
       <button class="act ${gamesOpen ? 'on' : ''}" id="a-games"><span class="ic">🎲</span>games</button>
     </div>
-    ${cheeseOpen ? `<div class="cheeses">${CHEESES.map(c => `<button class="cheese" data-c="${c.id}">${c.label}</button>`).join('')}</div>` : ''}
+    ${cheeseOpen ? `<div class="cheeses">${CHEESES.map(c => `<button class="cheese" data-c="${c.id}">${c.label}</button>`).join('')}${Object.entries(GD.stock(S)).map(([k, n]) => `<button class="cheese snack" data-snack="${k}">${GD.SEEDS[k].e} ${k} ×${n}</button>`).join('')}</div>` : ''}
     ${gamesOpen ? `<div class="cheeses">${Object.entries(GAMES).map(([k, g]) => g.grownOnly && E.stageOf(b) !== 'grown'
       ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
       : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
   ${friendHTML()}
+  ${gardenHTML()}
   <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
   </section>
@@ -441,6 +443,11 @@ function update() {
   below.querySelectorAll('[data-place]').forEach(p => p.onclick = () => { R.place(S, pickSlot, p.dataset.place); pickSlot = ''; Snd.play('tap'); touch(); renderBurrow();
     const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
   below.querySelectorAll('[data-c]').forEach(c => c.onclick = () => feed(c.dataset.c));
+  below.querySelectorAll('[data-snack]').forEach(c => c.onclick = () => feedSnack(c.dataset.snack));
+  below.querySelectorAll('[data-plant]').forEach(b => b.onclick = () => { const [i, seed] = b.dataset.plant.split(':'); GD.plant(S, +i, seed); plantPick = -1; Snd.play('tap'); touch(); paintGarden(); update(); });
+  below.querySelectorAll('[data-plot]').forEach(b => b.onclick = () => { plantPick = plantPick === +b.dataset.plot ? -1 : +b.dataset.plot; update(); });
+  below.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { if (GD.water(S, +b.dataset.water, Date.now())) { Snd.play('bubble'); setTimeout(() => Snd.play('bubble'), 120); const i = S.beings.findIndex(x => !x.napping); if (i > -1) say(i, E.rand(['glug glug, little plants', 'i\u2019m helping! (i\u2019m watching)', 'grow, friends, grow'])); touch(); paintGarden(); update(); } });
+  below.querySelectorAll('[data-harvest]').forEach(b => b.onclick = () => pickPlot(+b.dataset.harvest));
   below.querySelectorAll('.card').forEach(c => c.onclick = e => { if (e.target.closest('button,input')) return; sel = +c.dataset.i; update(); });
   below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; wearing = -1; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
   below.querySelectorAll('[data-wearing]').forEach(r => r.onclick = () => { wearing = wearing === +r.dataset.wearing ? -1 : +r.dataset.wearing; renaming = -1; update(); });
@@ -869,6 +876,48 @@ function together(byYou = false) {
   }
 }
 
+/* ---------------- garden ---------------- */
+let plantPick = -1;
+function gardenHTML() {
+  const plots = GD.ensure(S), seeds = GD.plantable(env.sea?.season || 'autumn'), st = GD.stock(S);
+  return `<section class="feasts garden"><div class="row between"><h2>the garden</h2><span class="hint">${env.c?.wet ? 'the rain is watering it' : env.c?.freezing ? 'frosty: growing paused' : env.wx ? 'grows with the real weather' : 'add your town so rain can water it'}</span></div>
+    <div class="plots">${plots.map((p, i) => { const s2 = GD.status(p, env.c || {});
+      return `<div class="plot ${s2.k}"><span class="plot-e">${p.seed ? (p.growth >= 1 ? GD.SEEDS[p.seed].e : p.growth > 0.5 ? '🌿' : p.growth > 0.12 ? '🌱' : '🟤') : '·'}</span>
+        <span class="plot-t">${p.seed ? `<strong>${GD.SEEDS[p.seed].label}</strong><span class="hint">${esc(s2.t)}</span>${s2.k !== 'ripe' ? `<span class="bar full" role="meter" aria-label="grown" aria-valuenow="${Math.round(p.growth * 100)}" title="grown ${Math.round(p.growth * 100)}%"><i style="width:${Math.round(p.growth * 100)}%"></i></span><span class="bar clean" role="meter" aria-label="water" aria-valuenow="${Math.round(p.water)}" title="water ${Math.round(p.water)}%"><i style="width:${Math.round(p.water)}%"></i></span>` : ''}` : '<span class="hint">empty plot</span>'}</span>
+        <span class="plot-b">${!p.seed ? `<button class="btn" data-plot="${i}">plant</button>` : s2.k === 'ripe' ? `<button class="btn" data-harvest="${i}">pick</button>` : `<button class="btn" data-water="${i}">💧 water</button>`}</span>
+        ${plantPick === i ? `<div class="cheeses seeds">${seeds.map(k => `<button class="cheese" data-plant="${i}:${k}">${GD.SEEDS[k].e} ${GD.SEEDS[k].label} <small>${GD.SEEDS[k].hours}h</small></button>`).join('')}</div>` : ''}</div>`; }).join('')}</div>
+    <p class="hint">pantry: ${Object.keys(st).length ? Object.entries(st).map(([k, n]) => `${GD.SEEDS[k].e} ${n}`).join(' · ') + ' (find them in the feed menu)' : 'empty for now'}</p>
+  </section>`;
+}
+function paintGarden() {
+  const el = $('garden-hill'); if (!el) return;
+  el.innerHTML = GD.ensure(S).map((p, i) => `<span class="gplot ${GD.status(p, env.c || {}).k}" style="left:${20 + i * 9}%">${p.seed ? `<i>${p.growth >= 1 ? GD.SEEDS[p.seed].e : p.growth > 0.5 ? '🌿' : p.growth > 0.12 ? '🌱' : ''}</i>` : ''}</span>`).join('');
+}
+function gardenTick(now = Date.now()) {
+  const ripe = GD.grow(S, now, env.c || {});
+  if (ripe.length) { const i = S.beings.findIndex(b => !b.napping); if (i > -1) setTimeout(() => say(i, `the ${GD.SEEDS[S.garden[ripe[0]].seed].label} are ready!`, 3600), 1200); touch(); }
+  paintGarden();
+}
+function pickPlot(i) {
+  const r = GD.harvest(S, i, D.dev); if (!r) return;
+  const sd = GD.SEEDS[r.seed];
+  E.keepsake(S, 'harvest:' + r.seed, sd.e, `first ${sd.label} from the garden`, Date.now());
+  Snd.play('coin'); const k = S.beings.findIndex(b => !b.napping);
+  if (k > -1) { fx_(k, sd.e, 3); say(k, r.seed === 'sunflower' ? 'a sunflower! it\u2019s going in a vase inside.' : `${r.n} ${sd.label}! into the pantry.`); }
+  touch(); paintGarden(); update();
+}
+function feedSnack(item) {
+  const b = S.beings[sel], sd = GD.SEEDS[item]; if (!sd?.snack) return;
+  if (b.napping) care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => sparkle(sel));
+  if (b.full >= 96) { cheeseOpen = false; update(); say(sel, 'so full. saving room for tomorrow.'); return; }
+  if (!GD.useSnack(S, item, D.dev)) return;
+  cheeseOpen = false;
+  care(sel, (s, x, now) => E.feed(s, x, { id: item, ...sd.snack }, now, D.dev), () => {
+    anim(sel, 'munch'); flash(sel, 'happy', 1800); fx_(sel, sd.e, 1); Snd.play('munch');
+    setTimeout(() => say(sel, E.rand([`homegrown ${item}! the best kind.`, `we grew this! together!`, `fresh from the garden. crunchy.`])), 900);
+  });
+}
+
 function chatter() {
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
@@ -883,6 +932,7 @@ function tick() {
   E.catchUp(S, Date.now(), mult());
   saveLocal();
   applyEnv();
+  gardenTick();
   if (!washMode && renaming < 0 && !busyTyping()) update();
   S.beings.forEach((b, i) => { if (b.napping && !before[i]) say(i, 'getting sleepy… just a little nap.'); });
 }
