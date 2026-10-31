@@ -33,3 +33,18 @@ test('the away diary gets a moment together for longer absences', () => {
   assert.equal(F.diaryMoments(s, T0, T0 + 3600e3).length, 0);
   assert.match(F.diaryMoments(s, T0, T0 + 5 * 3600e3)[0].text, /and/);
 });
+
+test('a pet that hatched on another device joins on merge, in hatch order', () => {
+  const a = pair(), b = JSON.parse(JSON.stringify(a));
+  const newcomer = E.newBeing('bunny', T0 + 5000); b.beings.push(newcomer);
+  E.setField(b, 'egg', { sp: 'bunny', at: T0 + 4000, hatched: true, id: newcomer.id }, T0 + 5000);
+  const m = E.merge(a, b);
+  assert.equal(m.beings.length, 3); assert.equal(m.beings[2].sp, 'bunny'); assert.equal(m.egg.hatched, true);
+  assert.equal(E.merge(m, a).beings.length, 3, 'stays merged');
+});
+
+test('with three pets, moments pick any two who are awake', () => {
+  const s = pair(); s.beings.push(E.newBeing('bunny', T0)); s.beings[0].napping = true;
+  const c = conditions({ w: { kind: 'clear', temp: 60, feels: 60, wind: 2, hours: [] }, phase: 'day' });
+  for (let k = 0; k < 50; k++) { const m = F.pickMoment(s, c, []); assert.ok(m && !m.who.includes(0) && m.who[0] !== m.who[1]); }
+});

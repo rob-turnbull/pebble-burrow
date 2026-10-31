@@ -354,12 +354,14 @@ function renderBurrow() {
     <button class="doorbtn corner" id="go-in2">🏠 inside</button>
     <button class="snap" id="snap" aria-label="take a photo">📷</button>
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
-    <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${drawBeing(b)}<span class="shadow"></span></button>`).join('')}</div>
+    ${eggHTML()}
+    <div class="beings n${S.beings.length}">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${drawBeing(b)}<span class="shadow"></span></button>`).join('')}</div>
   </div>`}
   <div id="below"></div>
   <nav class="tabs" id="tabs" aria-label="sections">${TABS.map(([id, e, label]) => `<button data-tab="${id}" aria-label="${label}"><span class="t-e" aria-hidden="true">${e}</span><span class="t-l">${label}</span><span class="t-badge" data-badge="${id}" hidden></span></button>`).join('')}</nav>`;
   on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => goTab(b.dataset.tab));
+  on('egg', hatchNewcomer);
   on('snd', () => { const v = Snd.toggle(); const b = $('snd'); b.textContent = v ? '🔊' : '🔇'; b.setAttribute('aria-pressed', v); b.setAttribute('aria-label', v ? 'turn sound off' : 'turn sound on'); Snd.ambience(env.kind, env.phase); });
   on('wxchip', () => { goTab('settings'); $('place-q')?.focus(); });
   const stage = $('stage');
@@ -889,13 +891,43 @@ function diaryHTML() {
     <button class="linkbtn" id="diary-close">close the diary</button></section>`;
 }
 
+/* ---------------- a third pet ---------------- */
+function checkEgg() {
+  if (!S || S.beings.length !== 2 || (S.egg && S.egg.sp)) return false;
+  if (F.level(S).index < 2) return false;
+  const have = new Set(S.beings.map(b => b.sp)), pool = Object.keys(SPECIES).filter(k => !have.has(k));
+  let h = 0; for (const ch of 'egg:' + S.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  E.setField(S, 'egg', { sp: pool[h % pool.length], at: Date.now(), hatched: false });
+  E.keepsake(S, 'egg', '🥚', 'an egg appeared by the door', Date.now());
+  touch();
+  if (view === 'burrow' && scene === 'hill') { renderBurrow(); setTimeout(() => say(0, 'is that… an egg?', 3600), 600); setTimeout(() => say(1, 'it\u2019s wiggling!', 3200), 2200); }
+  return true;
+}
+function eggHTML() {
+  if (!S.egg || S.egg.hatched || S.beings.length !== 2 || scene !== 'hill') return '';
+  return `<button class="newegg" id="egg" aria-label="an egg by the door. tap to help it hatch">${eggArt(S.egg.sp)}</button>`;
+}
+function hatchNewcomer() {
+  const el = $('egg'); if (!el || !S.egg || S.egg.hatched || S.beings.length !== 2) return;
+  el.classList.add('cracking'); Snd.play('grow');
+  setTimeout(() => {
+    const b = E.newBeing(S.egg.sp, Date.now());
+    S.beings.push(b);
+    E.setField(S, 'egg', { ...S.egg, hatched: true, id: b.id });
+    E.keepsake(S, 'newcomer:' + b.id, '🐣', `${E.first(b)} the ${SPECIES[b.sp].label} hatched and joined the burrow`, Date.now());
+    touch(); renderBurrow();
+    setTimeout(() => { fx_(2, '✨', 4); say(2, E.rand(['hello! is this my burrow? it\u2019s lovely.', 'hi hi hi! who are you? who am i?', 'i heard there was cheese.']), 4200); }, 400);
+    setTimeout(() => say(0, 'welcome home!', 3000), 2400);
+  }, 1300);
+}
+
 /* ---------------- friendship ---------------- */
 function friendHTML() {
   if (S.beings.length < 2) return '';
   const f = F.profile(S);
   return `<section class="friendship"><span class="hearts" aria-label="${f.hearts} of 5 hearts">${'♥'.repeat(f.hearts)}<span class="dim">${'♥'.repeat(5 - f.hearts)}</span></span>
     <span><strong>${esc(S.beings.map(E.first).join(' & '))}</strong> are ${f.label}</span>
-    <span class="hint">${f.shared} day${f.shared === 1 ? '' : 's'} cared for together${f.next ? ` · ${f.next.in} to ${f.next.label}` : ''}</span></section>`;
+    <span class="hint">${f.shared} day${f.shared === 1 ? '' : 's'} cared for together${f.next ? ` · ${f.next.in} to ${f.next.label}` : ''}${S.beings.length === 2 && f.index < 2 ? ' · a newcomer may come once they\u2019re good friends' : ''}${S.egg && !S.egg.hatched && S.beings.length === 2 ? ' · 🥚 there\u2019s an egg by the door!' : ''}</span></section>`;
 }
 let lastLevel = null, bondToday = { d: '', n: 0 };
 function together(byYou = false) {
@@ -903,14 +935,17 @@ function together(byYou = false) {
   const st = $('stage'); if (!st) return;
   if (S.beings.some(b => b.napping)) { if (byYou) say(S.beings.findIndex(b => !b.napping) > -1 ? S.beings.findIndex(b => !b.napping) : 0, 'shh, someone\u2019s napping'); return; }
   const m = F.pickMoment(S, env.c, S.beings.map(b => outfits[b.id]));
+  checkEgg();
   if (!m) return;
   const wrap = st.querySelector('.beings'); if (!wrap) return;
-  wrap.dataset.pair = m.cls; clearTimeout(wrap._pt); wrap._pt = setTimeout(() => { delete wrap.dataset.pair; }, 3600);
+  wrap.dataset.pair = m.cls; wrap.querySelectorAll('.being').forEach(el => el.classList.remove('pairA', 'pairB'));
+  beingEl(m.who[0])?.classList.add('pairA'); beingEl(m.who[1])?.classList.add('pairB');
+  clearTimeout(wrap._pt); wrap._pt = setTimeout(() => { delete wrap.dataset.pair; wrap.querySelectorAll('.being').forEach(el => el.classList.remove('pairA', 'pairB')); }, 3600);
   say(m.who[0], m.lines[0], 2600); setTimeout(() => say(m.who[1], m.lines[1], 2800), 1500);
   if (m.kind === 'share') setTimeout(() => fx_(m.who[1], '🧀', 1), 900);
-  else if (m.kind === 'highfive' || m.kind === 'tag') setTimeout(() => { fx_(0, '✨', 1); fx_(1, '✨', 1); }, 700);
+  else if (m.kind === 'highfive' || m.kind === 'tag') setTimeout(() => { fx_(m.who[0], '✨', 1); fx_(m.who[1], '✨', 1); }, 700);
   else setTimeout(() => fx_(m.who[0], '💛', 1), 800);
-  flash(0, 'happy', 1500); flash(1, 'happy', 1500); Snd.play('chirp', { pitch: 1.3 });
+  flash(m.who[0], 'happy', 1500); flash(m.who[1], 'happy', 1500); Snd.play('chirp', { pitch: 1.3 });
   const d = E.localDate(Date.now(), S.tz); if (bondToday.d !== d) bondToday = { d, n: 0 };
   const pts = byYou ? 3 : 1;
   if (bondToday.n < 12) {
@@ -1062,6 +1097,7 @@ function tick() {
 async function boot() {
   if (S) {
     lastLevel = F.level(S).index;
+    setTimeout(checkEgg, 4000);
     if (TZ && S.tz !== TZ) { E.setField(S, 'tz', TZ); touch(); }
     noteAway();
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();

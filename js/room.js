@@ -61,10 +61,10 @@ export function roomHTML(s, { arranging = false, pick = '', draw = b => art(b.sp
   s.beings.forEach((b, i) => (b.napping ? inBed : up).push(i));
   const standing = up.map((i, k) => {
     const b = s.beings[i], spot = favouriteSpot(s, b);
-    const left = spot ? Math.min(78, SLOTS[spot.slot].x + 4) : (up.length === 1 ? 44 : 30 + k * 30);
+    const left = spot ? Math.min(78, SLOTS[spot.slot].x + 4) : (up.length === 1 ? 44 : up.length === 2 ? 30 + k * 30 : 22 + k * 26);
     return `<button class="being inroom" data-i="${i}" style="left:${left}%" aria-label="${b.name}">${draw(b)}<span class="shadow"></span></button>`;
   }).join('');
-  const sleepers = inBed.map((i, k) => `<button class="being inbed napping" data-i="${i}" style="left:${8 + k * 34}%" aria-label="${s.beings[i].name}, asleep in bed">${draw(s.beings[i])}</button>`).join('');
+  const sleepers = inBed.map((i, k) => `<button class="being inbed napping" data-i="${i}" style="left:${(inBed.length > 2 ? 2 + k * 24 : 8 + k * 34)}%" aria-label="${s.beings[i].name}, asleep in bed">${draw(s.beings[i])}</button>`).join('');
   return `
     <div class="room-wall"></div>
     <div class="window" aria-hidden="true"><div class="pane"><span class="w-orb"></span><span class="w-wx"></span></div></div>

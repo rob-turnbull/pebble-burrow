@@ -10,7 +10,7 @@ export const NAP_AFTER_H = 10;                          // away this long -> eve
 export const WAKE_FLOOR = { full: 40, clean: 40, joy: 60 };
 const H = 36e5;
 const COUNTERS = ['feasts', 'hugs', 'boings'];
-const TOP_FIELDS = ['owner', 'bday', 'place', 'units', 'tz', 'helper', 'horizon'];
+const TOP_FIELDS = ['owner', 'bday', 'place', 'units', 'tz', 'helper', 'horizon', 'egg'];
 
 export const clamp = v => Math.max(0, Math.min(100, v));
 export const rand = a => a[Math.floor(Math.random() * a.length)];
@@ -262,7 +262,9 @@ export function merge(a, b) {
     x.taps = Math.max(x.taps || 0, y.taps || 0);
     x.days = [...new Set([...x.days, ...y.days])].sort();
     return x;
-  });
+  });  b.beings.forEach(y => { if (!out.beings.some(x => x.id === y.id)) out.beings.push(clone(y)); });   // a newcomer hatched on the other device
+  out.beings.sort((p, q) => (p.born || 0) - (q.born || 0));
+
   const seen = new Set(out.log.map(logKey));
   b.log.forEach(e => { if (!seen.has(logKey(e))) { out.log.push(clone(e)); seen.add(logKey(e)); } });
   out.log.sort((p, q) => q.t - p.t); out.log = out.log.slice(0, 60);

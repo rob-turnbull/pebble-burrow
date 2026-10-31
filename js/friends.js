@@ -49,15 +49,20 @@ const MOMENTS = {
  * @param r  random function
  */
 export function pickMoment(s, c, outfits, r = Math.random) {
-  if (s.beings.length < 2 || s.beings.some(b => b.napping)) return null;
-  const [a, b] = s.beings.map(temperamentOf);
-  const fits = Object.entries(MOMENTS).filter(([, m]) => m.ok(a, b, s, c, outfits));
+  const awake = s.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1);
+  if (awake.length < 2) return null;
+  // any two who are awake (with three pets, the pair changes)
+  const i0 = awake.splice(Math.floor(r() * awake.length), 1)[0], i1 = awake[Math.floor(r() * awake.length)];
+  const pair = { beings: [s.beings[i0], s.beings[i1]] };
+  const [a, b] = pair.beings.map(temperamentOf);
+  const outs = outfits ? [outfits[i0], outfits[i1]] : outfits;
+  const fits = Object.entries(MOMENTS).filter(([, m]) => m.ok(a, b, pair, c, outs));
   const specific = fits.filter(([k]) => k !== 'highfive');
   const pool = specific.length && r() < 0.85 ? specific : fits;
   const [kind, m] = pool[Math.floor(r() * pool.length)];
   const lines = m.lines[Math.floor(r() * m.lines.length)];
-  let who = [0, 1];
-  if (kind === 'share') who = s.beings[0].full > s.beings[1].full ? [0, 1] : [1, 0];
+  let who = [i0, i1];
+  if (kind === 'share') who = s.beings[i0].full > s.beings[i1].full ? [i0, i1] : [i1, i0];
   return { kind, cls: m.cls, lines: [lines[0], lines[1]], who };
 }
 
