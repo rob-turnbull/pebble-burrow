@@ -19,6 +19,7 @@ import * as GD from './garden.js';
 import * as V from './visitors.js';
 import * as PH from './photo.js';
 import * as HZ from './horizon.js';
+import * as WS from './wishes.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -367,7 +368,7 @@ function renderBurrow() {
   const stage = $('stage');
   if (scene === 'hill') { fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900); } else fx = null;
   on('snap', takePhoto);
-  const goIn = () => { scene = 'room'; washMode = false; spongeEl = null; Snd.play('tap'); renderBurrow(); };
+  const goIn = () => { scene = 'room'; washMode = false; spongeEl = null; Snd.play('tap'); renderBurrow(); setTimeout(() => wish('inside', null), 500); };
   on('go-in', goIn); on('go-in2', goIn);
   on('go-out', () => { scene = 'hill'; arranging = false; pickSlot = ''; spongeEl = null; Snd.play('tap'); renderBurrow(); });
   stage.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => { if (!arranging) return; pickSlot = pickSlot === b.dataset.slot ? '' : b.dataset.slot; renderBurrow(); });
@@ -421,6 +422,7 @@ function update() {
       ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
       : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
+  ${wishesHTML()}
   ${reportHTML()}
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
   ${friendHTML()}
@@ -456,15 +458,15 @@ function wireBelow(below, b) {
     const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
   below.querySelectorAll('[data-c]').forEach(c => c.onclick = () => feed(c.dataset.c));
   below.querySelectorAll('[data-snack]').forEach(c => c.onclick = () => feedSnack(c.dataset.snack));
-  below.querySelectorAll('[data-plant]').forEach(b => b.onclick = () => { const [i, seed] = b.dataset.plant.split(':'); GD.plant(S, +i, seed); plantPick = -1; Snd.play('tap'); touch(); paintGarden(); update(); });
+  below.querySelectorAll('[data-plant]').forEach(b => b.onclick = () => { const [i, seed] = b.dataset.plant.split(':'); GD.plant(S, +i, seed); plantPick = -1; wish('plant', null, { seed }); Snd.play('tap'); touch(); paintGarden(); update(); });
   below.querySelectorAll('[data-plot]').forEach(b => b.onclick = () => { plantPick = plantPick === +b.dataset.plot ? -1 : +b.dataset.plot; update(); });
-  below.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { if (GD.water(S, +b.dataset.water, Date.now())) { Snd.play('bubble'); setTimeout(() => Snd.play('bubble'), 120); const i = S.beings.findIndex(x => !x.napping); if (i > -1) say(i, E.rand(['glug glug, little plants', 'i\u2019m helping! (i\u2019m watching)', 'grow, friends, grow'])); touch(); paintGarden(); update(); } });
+  below.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { if (GD.water(S, +b.dataset.water, Date.now())) { wish('water', null); Snd.play('bubble'); setTimeout(() => Snd.play('bubble'), 120); const i = S.beings.findIndex(x => !x.napping); if (i > -1) say(i, E.rand(['glug glug, little plants', 'i\u2019m helping! (i\u2019m watching)', 'grow, friends, grow'])); touch(); paintGarden(); update(); } });
   below.querySelectorAll('[data-harvest]').forEach(b => b.onclick = () => pickPlot(+b.dataset.harvest));
   below.querySelectorAll('.card').forEach(c => c.onclick = e => { if (e.target.closest('button,input')) return; sel = +c.dataset.i; update(); });
   below.querySelectorAll('[data-rename]').forEach(r => r.onclick = () => { renaming = +r.dataset.rename; wearing = -1; update(); const inp = $('rn'); inp?.focus(); inp?.select(); });
   below.querySelectorAll('[data-wearing]').forEach(r => r.onclick = () => { wearing = wearing === +r.dataset.wearing ? -1 : +r.dataset.wearing; renaming = -1; update(); });
   below.querySelectorAll('[data-wear]').forEach(w => w.onclick = () => { const i = +w.closest('.card').dataset.i, x = S.beings[i];
-    E.setWear(S, x, w.dataset.wear === x.wear ? '' : w.dataset.wear); touch(); update(); if (x.wear) say(i, E.rand(['do i look fancy?', 'i feel very important now', 'is it on straight?'])); });
+    E.setWear(S, x, w.dataset.wear === x.wear ? '' : w.dataset.wear); touch(); update(); if (x.wear) wish('wear', i); if (x.wear) say(i, E.rand(['do i look fancy?', 'i feel very important now', 'is it on straight?'])); });
   const rf = $('rnf'); if (rf) rf.onsubmit = e => { e.preventDefault(); const v = $('rn').value.trim(); if (v) E.rename(S, S.beings[renaming], v.slice(0, 32)); renaming = -1; touch(); renderBurrow(); };
   on('rnx', () => { renaming = -1; update(); });
 }
@@ -611,6 +613,7 @@ function feed(cid) {
   if (b.full >= 96) { cheeseOpen = false; update(); say(sel, 'so full. saving room for tomorrow.'); return; }
   cheeseOpen = false;
   care(sel, (s, x, now) => E.feed(s, x, c, now, D.dev), () => {
+    wish('feed', sel, { cheese: c.id });
     anim(sel, 'munch'); flash(sel, 'happy', 1800); fx_(sel, '🧀', 1); Snd.play('munch'); Snd.buzz([8, 60, 8, 60, 8]);
     setTimeout(() => { fx_(sel, '💛', 3); say(sel, P.feedLine(S, S.beings[sel], cid === 'crumb' ? 'a tiny crumb' : cid)); }, 1000);
   });
@@ -619,9 +622,11 @@ function act(kind) {
   const b = S.beings[sel];
   if (b.napping) { say(sel, 'zzz… (wake me first?)'); return; }
   if (kind === 'play') care(sel, (s, x, now) => E.play(s, x, now, D.dev), () => {
+    wish('boing', sel);
     anim(sel, 'boing'); flash(sel, 'surprised', 700); Snd.play('boing'); Snd.buzz([15, 300, 25]); setTimeout(() => fx_(sel, env.kind === 'snow' ? '❄️' : '✨', 2), 450);
     say(sel, env.kind === 'snow' ? 'boing in the SNOW' : env.kind === 'rain' ? 'puddle boing!' : env.sea.costume ? 'spooky boing!' : E.rand(P.T(S.beings[sel]).boing)); });
   if (kind === 'hug') care(sel, (s, x, now) => E.hug(s, x, now, D.dev), () => {
+    wish('hug', sel);
     anim(sel, 'squish'); flash(sel, 'happy', 1800); fx_(sel, '💗', 3); Snd.play('hug'); Snd.buzz([40]); say(sel, env.kind === 'storm' ? 'safe now.' : E.rand(P.T(S.beings[sel]).hug)); });
 }
 function startGame(kind) {
@@ -634,7 +639,7 @@ function startGame(kind) {
     fx: { play: Snd.play, buzz: Snd.buzz },
     done: score => {
       let joy = 0;
-      care(i, (s, x, now) => { joy = E.playedGame(s, x, kind, score, now, D.dev).joy; }, () => { fx_(i, '🎉', 2); say(i, score >= 8 ? 'again! again!' : E.rand(P.T(S.beings[i]).boing)); });
+      care(i, (s, x, now) => { joy = E.playedGame(s, x, kind, score, now, D.dev).joy; }, () => { setTimeout(() => wish('game', i, { kind }), 1200); fx_(i, '🎉', 2); say(i, score >= 8 ? 'again! again!' : E.rand(P.T(S.beings[i]).boing)); });
       return `${E.first(b)}\u2019s joy +${joy}`;
     } });
 }
@@ -643,7 +648,7 @@ function tapBeing(i) {
   if (sel !== i) { sel = i; cheeseOpen = false; update(); return; }
   const b = S.beings[i]; b.taps = (b.taps || 0) + 1;
   if (b.napping) say(i, 'zzz…');
-  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); flash(i, 'happy', 2000); fx_(i, '🤫', 1); Snd.play('secret'); }
+  else if (b.taps % 7 === 0) { say(i, SPECIES[b.sp].secret, 5200); flash(i, 'happy', 2000); fx_(i, '🤫', 1); Snd.play('secret'); wish('secret', i); }
   else { anim(i, 'squish'); Snd.play('tap'); Snd.buzz([6]); if (b.taps % 7 === 5) say(i, 'hehe… keep going'); else if (env.sea.costume && b.taps % 7 === 2) say(i, E.rand(SEASON_LINES.costume)); }
   saveLocal();
 }
@@ -656,6 +661,7 @@ function scrubOne(i, amt) {
   const b = S.beings[i];
   if (b.napping) care(i, (s, x, now) => E.wake(s, x, now, D.dev), () => sparkle(i));
   if (E.scrub(S, b, amt, Date.now())) {
+    setTimeout(() => wish('wash', i), 600);
     hideSponge(); E.checkGrowth(S); fx_(i, '✨', 3); say(i, E.rand(['squeaky!', 'i feel like a brand new pebble', 'sparkly sparkly'])); touch(); update();
   }
 }
@@ -891,6 +897,40 @@ function diaryHTML() {
     <button class="linkbtn" id="diary-close">close the diary</button></section>`;
 }
 
+/* ---------------- daily wishes ---------------- */
+let wishList = [], wishDay = '';
+function currentWishes() {
+  const day = E.localDate(Date.now(), S.tz) + '|' + S.beings.length;
+  if (day !== wishDay || !wishList.length) { wishList = WS.todaysWishes(S, env.c); wishDay = day; }
+  return wishList;
+}
+function wish(ev, i, detail = {}) {
+  if (!S) return;
+  const list = currentWishes(), b = i == null ? null : S.beings[i];
+  const fin = WS.grant(S, list, ev, b ? b.id : null, detail, D.dev);
+  if (!fin.length) { if (list.some(w => WS.WISHES[w.id].ev === ev)) { touch(); if (view === 'burrow' && tab === 'hill' && !busyTyping()) update(); } return; }
+  E.catchUp(S, Date.now(), mult());
+  fin.forEach((w, k) => {
+    const j = S.beings.findIndex(x => x.id === w.being), x = S.beings[j];
+    x.joy = E.clamp(x.joy + 12); x.statsAt = Date.now();
+    setTimeout(() => { fx_(j, '🌟', 2); flash(j, 'happy', 1800); Snd.play('sparkle'); say(j, E.rand(['wish granted! you\u2019re the best.', 'you remembered my wish!', 'that was exactly what i wanted']), 3200); }, 700 + k * 900);
+  });
+  const total = WS.grantedTotal(S);
+  [[1, 'the first wish came true'], [10, 'ten wishes granted'], [50, 'fifty wishes granted. they\u2019re very lucky']].forEach(([n, t]) => { if (total >= n) E.keepsake(S, 'wishes:' + n, '🌟', t, Date.now()); });
+  const today = list.filter(w => w.being), allDone = today.every(w => WS.done(S, w));
+  if (allDone && E.keepsake(S, 'allwishes:' + E.localDate(Date.now(), S.tz), '🌈', `every wish granted on ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, Date.now())) {
+    setTimeout(() => { S.beings.forEach((x, j) => { fx_(j, '🌈', 1); flash(j, 'happy', 2000); }); Snd.play('grow'); confetti(); }, 1800 + fin.length * 900);
+  }
+  touch(); if (view === 'burrow' && !busyTyping()) update();
+}
+function wishesHTML() {
+  const list = currentWishes(); if (!list.length) return '';
+  const open = list.filter(w => !WS.done(S, w)).length;
+  return `<section class="wishes"><div class="row between"><h2>today\u2019s wishes</h2><span class="hint">${open ? `${list.length - open} of ${list.length} granted` : 'all granted! 🌈'}</span></div>
+    <ul>${S.beings.map(b => list.filter(w => w.being === b.id).map(w => { const d = WS.done(S, w), p = Math.min(w.need, WS.progress(S, w.key));
+      return `<li class="${d ? 'done' : ''}"><span class="w-e" aria-hidden="true">${d ? '✅' : w.e}</span><span><strong>${esc(E.first(b))}:</strong> ${esc(w.text)}${w.need > 1 && !d ? ` <span class="hint">(${p}/${w.need})</span>` : ''}</span></li>`; }).join('')).join('')}</ul></section>`;
+}
+
 /* ---------------- a third pet ---------------- */
 function checkEgg() {
   if (!S || S.beings.length !== 2 || (S.egg && S.egg.sp)) return false;
@@ -950,7 +990,7 @@ function together(byYou = false) {
   const pts = byYou ? 3 : 1;
   if (bondToday.n < 12) {
     bondToday.n += pts; F.bond(S, pts, D.dev);
-    if (byYou) { const now = Date.now(); E.catchUp(S, now, mult()); S.beings.forEach(b => { b.joy = E.clamp(b.joy + 6); }); }
+    if (byYou) { const now = Date.now(); E.catchUp(S, now, mult()); S.beings.forEach(b => { b.joy = E.clamp(b.joy + 6); }); setTimeout(() => wish('together', null), 3000); }
     const lv = F.level(S);
     if (lastLevel != null && lv.index > lastLevel) { E.keepsake(S, 'bond:' + lv.index, '💞', `${S.beings.map(E.first).join(' and ')} became ${lv.label}`, Date.now()); setTimeout(() => { fx_(0, '💞', 2); fx_(1, '💞', 2); Snd.play('grow'); }, 3200); }
     lastLevel = lv.index;
@@ -982,6 +1022,7 @@ function gardenTick(now = Date.now()) {
 }
 function pickPlot(i) {
   const r = GD.harvest(S, i, D.dev); if (!r) return;
+  wish('harvest', null, { seed: r.seed });
   const sd = GD.SEEDS[r.seed];
   E.keepsake(S, 'harvest:' + r.seed, sd.e, `first ${sd.label} from the garden`, Date.now());
   Snd.play('coin'); const k = S.beings.findIndex(b => !b.napping);
@@ -995,6 +1036,7 @@ function feedSnack(item) {
   if (!GD.useSnack(S, item, D.dev)) return;
   cheeseOpen = false;
   care(sel, (s, x, now) => E.feed(s, x, { id: item, ...sd.snack }, now, D.dev), () => {
+    wish('snack', sel);
     anim(sel, 'munch'); flash(sel, 'happy', 1800); fx_(sel, sd.e, 1); Snd.play('munch');
     setTimeout(() => say(sel, E.rand([`homegrown ${item}! the best kind.`, `we grew this! together!`, `fresh from the garden. crunchy.`])), 900);
   });
@@ -1022,6 +1064,7 @@ function greetVisitor(id) {
   const v = V.VISITORS[id], el = visitorEl; if (!el) return;
   clearTimeout(el._leave);
   const r = V.greet(S, id, D.dev);
+  setTimeout(() => wish('visitor', null, { id }), 1800);
   if (r.first) E.keepsake(S, 'visitor:' + id, v.e, `first visit from a ${v.label}`, Date.now());
   if (r.gift) GD.giveSnack(S, r.gift, 1, D.dev);
   Snd.play('sparkle'); Snd.buzz([10, 40, 10]);
@@ -1052,6 +1095,7 @@ async function takePhoto() {
   const fl = document.createElement('div'); fl.className = 'shutter'; st.appendChild(fl); setTimeout(() => fl.remove(), 600);
   Snd.play('shutter'); Snd.buzz([20]);
   PH.add({ id: Date.now().toString(36), t: Date.now(), data, wx: env.c?.kind || '' });
+  setTimeout(() => wish('photo', null), 400);
   if (E.keepsake(S, 'photo:first', '📷', 'the first photo on the hill', Date.now())) touch();
   snapping = false; update();
 }

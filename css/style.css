@@ -585,3 +585,10 @@ body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .newegg.cracking{animation:hatch 1.3s ease-in forwards}
 @media (max-width:440px){.beings.n3 .say{max-width:min(170px,40vw)}}
 .room-beings{z-index:5}
+
+/* ---------------- wishes ---------------- */
+.wishes{background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.wishes h2{font-size:18px}
+.wishes ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.wishes li{display:grid;grid-template-columns:1.6em 1fr;gap:6px;align-items:baseline}
+.wishes li.done{color:var(--ink-soft)}.wishes li.done strong{font-weight:700}
