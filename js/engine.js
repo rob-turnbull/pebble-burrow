@@ -266,6 +266,7 @@ export function merge(a, b) {
   out.log.sort((p, q) => q.t - p.t); out.log = out.log.slice(0, 60);
   out.wxDays = { ...(b.wxDays || {}), ...(out.wxDays || {}) };
   out.room = out.room || {};
+  out.bond = { ...(out.bond || {}) }; for (const [dev, n] of Object.entries(b.bond || {})) out.bond[dev] = Math.max(out.bond[dev] || 0, n);
   const fr = new Map((out.friends || []).map(f => [f.addr, f]));
   (b.friends || []).forEach(f => { if ((f.at || 0) > (fr.get(f.addr)?.at || 0)) fr.set(f.addr, clone(f)); });
   out.friends = [...fr.values()];

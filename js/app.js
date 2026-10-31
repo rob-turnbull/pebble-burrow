@@ -14,6 +14,7 @@ import * as R from './room.js';
 import { conditions, summary as wxSummary, icon as wxIcon } from './conditions.js';
 import * as O from './outfits.js';
 import { writeDiary, awayLabel } from './diary.js';
+import * as F from './friends.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -38,7 +39,7 @@ const app = document.getElementById('app');
 let stopLife = null;
 const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
 const outfits = {};
-const diaryHooks = [];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
+const diaryHooks = [F.diaryMoments];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
 let DIARY = (() => { try { return JSON.parse(localStorage.getItem('pebble-burrow-diary')); } catch { return null; } })();
 let outfitLayers = b => O.layersFor(b, outfits[b.id], env.c);
 let MB = null, mbErr = '', mailAll = false;
@@ -175,8 +176,10 @@ let lastDress = '';
 function dressForWeather() {
   if (!S || !env.c) return;
   const changed = [];
+  const lvl = S.beings.length > 1 ? F.level(S).index : 0;
   S.beings.forEach((b, i) => {
     const o = O.pickOutfit(b, env.c);
+    if (i === 1 && lvl >= 3 && env.c?.known) { const first = outfits[S.beings[0].id]?.items.find(x => O.ITEMS[x].slot === 'head'); if (first && !o.items.some(x => O.ITEMS[x].slot === 'head') && !['flowers', 'pumpkin', 'party', 'bow'].includes(b.wear) && (Math.floor(Date.now() / 1800e3) % 3 === 0)) o.items.push(first); }
     const prev = outfits[b.id];
     if (!prev || prev.key !== o.key || prev.items.join() !== o.items.join() || prev.wear !== b.wear) { outfits[b.id] = { ...o, wear: b.wear }; changed.push(i); }
   });
@@ -403,9 +406,10 @@ function update() {
     ${cheeseOpen ? `<div class="cheeses">${CHEESES.map(c => `<button class="cheese" data-c="${c.id}">${c.label}</button>`).join('')}</div>` : ''}
     ${gamesOpen ? `<div class="cheeses">${Object.entries(GAMES).map(([k, g]) => g.grownOnly && E.stageOf(b) !== 'grown'
       ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
-      : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}</div>` : ''}
+      : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
+  ${friendHTML()}
   <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
   </section>
@@ -420,6 +424,7 @@ function update() {
   on('rep-toggle', () => { reportOpen = !reportOpen; try { localStorage.setItem('pebble-burrow-report', reportOpen ? '1' : '0'); } catch {} update(); });
   on('rep-town', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
+  on('play-together', () => { gamesOpen = false; together(true); });
   on('a-games', () => { gamesOpen = !gamesOpen; cheeseOpen = false; washMode = false; update(); });
   below.querySelectorAll('[data-game]').forEach(g => g.onclick = () => startGame(g.dataset.game));
   on('a-wash', () => { if (washMode) autoWash(); else { washMode = true; cheeseOpen = false; showSponge(); update(); } });
@@ -830,6 +835,40 @@ function diaryHTML() {
     <button class="linkbtn" id="diary-close">close the diary</button></section>`;
 }
 
+/* ---------------- friendship ---------------- */
+function friendHTML() {
+  if (S.beings.length < 2) return '';
+  const f = F.profile(S);
+  return `<section class="friendship"><span class="hearts" aria-label="${f.hearts} of 5 hearts">${'♥'.repeat(f.hearts)}<span class="dim">${'♥'.repeat(5 - f.hearts)}</span></span>
+    <span><strong>${esc(S.beings.map(E.first).join(' & '))}</strong> are ${f.label}</span>
+    <span class="hint">${f.shared} day${f.shared === 1 ? '' : 's'} cared for together${f.next ? ` · ${f.next.in} to ${f.next.label}` : ''}</span></section>`;
+}
+let lastLevel = null, bondToday = { d: '', n: 0 };
+function together(byYou = false) {
+  if (!S || S.beings.length < 2) return;
+  const st = $('stage'); if (!st) return;
+  if (S.beings.some(b => b.napping)) { if (byYou) say(S.beings.findIndex(b => !b.napping) > -1 ? S.beings.findIndex(b => !b.napping) : 0, 'shh, someone\u2019s napping'); return; }
+  const m = F.pickMoment(S, env.c, S.beings.map(b => outfits[b.id]));
+  if (!m) return;
+  const wrap = st.querySelector('.beings'); if (!wrap) return;
+  wrap.dataset.pair = m.cls; clearTimeout(wrap._pt); wrap._pt = setTimeout(() => { delete wrap.dataset.pair; }, 3600);
+  say(m.who[0], m.lines[0], 2600); setTimeout(() => say(m.who[1], m.lines[1], 2800), 1500);
+  if (m.kind === 'share') setTimeout(() => fx_(m.who[1], '🧀', 1), 900);
+  else if (m.kind === 'highfive' || m.kind === 'tag') setTimeout(() => { fx_(0, '✨', 1); fx_(1, '✨', 1); }, 700);
+  else setTimeout(() => fx_(m.who[0], '💛', 1), 800);
+  flash(0, 'happy', 1500); flash(1, 'happy', 1500); Snd.play('chirp', { pitch: 1.3 });
+  const d = E.localDate(Date.now(), S.tz); if (bondToday.d !== d) bondToday = { d, n: 0 };
+  const pts = byYou ? 3 : 1;
+  if (bondToday.n < 12) {
+    bondToday.n += pts; F.bond(S, pts, D.dev);
+    if (byYou) { const now = Date.now(); E.catchUp(S, now, mult()); S.beings.forEach(b => { b.joy = E.clamp(b.joy + 6); }); }
+    const lv = F.level(S);
+    if (lastLevel != null && lv.index > lastLevel) { E.keepsake(S, 'bond:' + lv.index, '💞', `${S.beings.map(E.first).join(' and ')} became ${lv.label}`, Date.now()); setTimeout(() => { fx_(0, '💞', 2); fx_(1, '💞', 2); Snd.play('grow'); }, 3200); }
+    lastLevel = lv.index;
+    touch(); if (view === 'burrow' && !busyTyping()) setTimeout(update, 3400);
+  }
+}
+
 function chatter() {
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
@@ -850,6 +889,7 @@ function tick() {
 
 async function boot() {
   if (S) {
+    lastLevel = F.level(S).index;
     if (TZ && S.tz !== TZ) { E.setField(S, 'tz', TZ); touch(); }
     noteAway();
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();
@@ -867,6 +907,7 @@ async function boot() {
   setInterval(tick, 30e3);
   setInterval(() => { if (S && document.visibilityState === 'visible') loadMail(); }, 5 * 60e3);
   setInterval(chatter, 80e3);
+  setInterval(() => { if (S && view === 'burrow' && document.visibilityState === 'visible' && !washMode && !document.querySelector('.modal') && Math.random() < 0.55) together(); }, 95e3);
   setInterval(weatherLife, 3500);
   setInterval(() => refreshWeather(), 10 * 60e3);
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
