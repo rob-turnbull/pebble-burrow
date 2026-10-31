@@ -21,6 +21,7 @@ import * as PH from './photo.js';
 import * as HZ from './horizon.js';
 import * as WS from './wishes.js';
 import * as NT from './night.js';
+import * as AL from './alerts.js';
 import { esc, fmtAgo, fmtDay } from './util.js';
 import * as Vw from './views.js';
 import { startFireworks } from './fireworks.js';
@@ -133,6 +134,7 @@ async function refreshWeather(force = false) {
   if (fresh && !force) return;
   try { W = await fetchWeather(S.place, S.units, W); ls.set(K.wx, W); applyEnv(); }
   catch { /* keep last known weather; offline is fine */ }
+  refreshAlerts(force);
 }
 
 function applyEnv() {
@@ -189,6 +191,8 @@ function dressForWeather() {
   const lvl = S.beings.length > 1 ? F.level(S).index : 0;
   S.beings.forEach((b, i) => {
     const o = O.pickOutfit(b, env.c);
+    const al = ALERTS[0];
+    if (al && AL.isSerious(al) && ['tornado', 'storm', 'wind'].includes(AL.alertKind(al)) && !o.items.includes('blanket')) { o.items = o.items.filter(x => !['head', 'face', 'hand', 'front'].includes(O.ITEMS[x].slot)); o.items.push('blanket'); o.key += '|alert'; o.line = AL.reactLine(al); }
     if (i === 1 && lvl >= 3 && env.c?.known) { const first = outfits[S.beings[0].id]?.items.find(x => O.ITEMS[x].slot === 'head'); if (first && !o.items.some(x => O.ITEMS[x].slot === 'head') && !['flowers', 'pumpkin', 'party', 'bow'].includes(b.wear) && (Math.floor(Date.now() / 1800e3) % 3 === 0)) o.items.push(first); }
     const prev = outfits[b.id];
     if (!prev || prev.key !== o.key || prev.items.join() !== o.items.join() || prev.wear !== b.wear) { outfits[b.id] = { ...o, wear: b.wear }; changed.push(i); }
@@ -343,6 +347,7 @@ function renderBurrow() {
     <div class="decor" id="decor"></div>
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
+    <div class="alertbar" id="alertbar" hidden></div>
     <button class="doorbtn corner" id="go-in2">🏠 inside</button>
     <button class="snap" id="snap" aria-label="take a photo">📷</button>
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
@@ -366,7 +371,7 @@ function renderBurrow() {
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
-  applyEnv(); paintSync(); gardenTick(); update();
+  applyEnv(); paintSync(); gardenTick(); paintAlert(); update();
   stopLife?.(); stopLife = startLife(S.beings.length, i => { const b = S?.beings[i]; if (!b) return null; const g = genesOf(b); return { napping: b.napping, temper: P.temperamentOf(b), joy: b.joy, eyeScale: g?.eyeScale }; });
 }
 function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -414,6 +419,7 @@ function update() {
       : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
   ${Vw.wishesHTML(S, currentWishes())}
+  ${alertHTML()}
   ${Vw.reportHTML({ S, env, open: reportOpen })}
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
   ${Vw.friendHTML(S)}
@@ -867,6 +873,39 @@ function noteAway(now = Date.now()) {
   DIARY = { from, to: now, entries };
   try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
   return true;
+}
+
+/* ---------------- weather warnings ---------------- */
+let ALERTS = (() => { try { const a = JSON.parse(localStorage.getItem('pebble-burrow-alerts')); return a && Date.now() - a.at < AL.ALERT_TTL * 3 ? a.list : []; } catch { return []; } })();
+let alertsAt = 0, alertSeen = '';
+async function refreshAlerts(force = false) {
+  if (!S?.place || !AL.inUS(S.place)) { if (ALERTS.length) { ALERTS = []; paintAlert(); } return; }
+  if (!force && Date.now() - alertsAt < AL.ALERT_TTL) return;
+  alertsAt = Date.now();
+  try {
+    const list = await AL.fetchAlerts(S.place);
+    const key = list.map(a => a.id).join('|'), before = ALERTS.map(a => a.id).join('|');
+    ALERTS = list;
+    try { localStorage.setItem('pebble-burrow-alerts', JSON.stringify({ at: Date.now(), list })); } catch {}
+    if (key !== before) { paintAlert(); dressForWeather(); if (view === 'burrow' && tab === 'hill' && !busyTyping()) update(); }
+    if (list[0] && list[0].id !== alertSeen) {
+      alertSeen = list[0].id;
+      const i = S.beings.findIndex(b => !b.napping);
+      if (i > -1) setTimeout(() => say(i, AL.reactLine(list[0]), 5200), 5200);
+      E.keepsake(S, 'alert:' + AL.alertKind(list[0]), '⚠️', `rode out a ${list[0].event.toLowerCase()} together`, Date.now()) && touch();
+    }
+  } catch { /* the NWS is sometimes busy; try again next time */ }
+}
+function paintAlert() {
+  const el = $('alertbar'); if (!el) return;
+  const a = ALERTS[0];
+  el.hidden = !a;
+  if (a) { el.className = 'alertbar ' + (AL.isSerious(a) ? 'serious' : ''); el.textContent = `⚠️ ${a.event}${ALERTS.length > 1 ? ` +${ALERTS.length - 1}` : ''}`; el.title = a.headline; }
+}
+function alertHTML() {
+  if (!ALERTS.length) return '';
+  return `<section class="alerts">${ALERTS.slice(0, 3).map(a => `<details class="alert ${AL.isSerious(a) ? 'serious' : ''}"><summary><strong>⚠️ ${esc(a.event)}</strong>${a.ends ? `<span class="hint"> until ${new Date(a.ends).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</span>` : ''}</summary>
+    <p>${esc(a.headline)}</p>${a.instruction ? `<p class="hint">${esc(a.instruction)}</p>` : ''}<p class="hint">from the National Weather Service. for real decisions, check <a href="https://www.weather.gov/" target="_blank" rel="noopener">weather.gov</a> or local news.</p></details>`).join('')}</section>`;
 }
 
 /* ---------------- night sky ---------------- */

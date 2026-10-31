@@ -50,6 +50,16 @@ export function decideNudge(save, now = Date.now(), hist = {}, wxKind) {
   return pick ? { key: pick.key, title: pick.title, body: pick.body, tag: pick.key.split(':')[0] } : null;
 }
 
+/**
+ * Which new weather warnings to push. Warnings don't count toward the daily limit.
+ * Quiet hours hold back everything except Severe and Extreme.
+ */
+export function alertsToSend(alerts, seen = {}, now = Date.now(), tz) {
+  const { hour } = localParts(now, tz);
+  const quiet = hour >= NUDGE.quietFrom || hour < NUDGE.quietTo;
+  return alerts.filter(a => !seen[a.id] && (!quiet || a.severity === 'Severe' || a.severity === 'Extreme'));
+}
+
 /** History after sending `n`. Keeps per-key times for 3 days so gaps carry across midnight. */
 export function recordNudge(hist = {}, n, now, tz) {
   const { date } = localParts(now, tz);

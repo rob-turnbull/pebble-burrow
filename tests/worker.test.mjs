@@ -155,3 +155,17 @@ test('scheduled nudge reaches devices and forgets ones that are gone', async () 
   const again = await runNudges(h.env, NOON + 30 * M);
   assert.equal(again.skipped, 'nothing to say');
 });
+
+test('weather warnings: parsed, ranked, and only serious ones break quiet hours', async () => {
+  const { parseAlerts, isSerious, alertKind, inUS } = await import('../js/alerts.js');
+  const { alertsToSend } = await import('../worker/src/nudge.js');
+  const feat = (id, event, severity, ends) => ({ id, properties: { id, event, severity, headline: event + ' issued', ends } });
+  const later = new Date(NOON + 6 * H).toISOString(), past = new Date(NOON - H).toISOString();
+  const list = parseAlerts({ features: [feat('a', 'Wind Advisory', 'Moderate', later), feat('b', 'Tornado Warning', 'Extreme', later), feat('c', 'Flood Warning', 'Severe', past), feat('d', 'Test Message', 'Minor', later), feat('e', 'Special Weather Statement', 'Minor', later)] }, NOON);
+  assert.deepEqual(list.map(a => a.id), ['b', 'a'], 'expired, test and minor statements dropped; most serious first');
+  assert.ok(isSerious(list[0])); assert.equal(alertKind(list[0]), 'tornado');
+  assert.ok(inUS({ lat: 45.5, lon: -123 })); assert.ok(!inUS({ lat: 51.5, lon: -0.1 }));
+  const night = Date.UTC(2026, 9, 31, 7);                        // midnight PDT
+  assert.deepEqual(alertsToSend(list, {}, night, 'America/Los_Angeles').map(a => a.id), ['b'], 'only the tornado warning wakes you');
+  assert.deepEqual(alertsToSend(list, { b: 1 }, NOON, 'America/Los_Angeles').map(a => a.id), ['a'], 'never twice');
+});

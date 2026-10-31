@@ -6,7 +6,8 @@ import { GistSync } from '../../js/sync.js';
 import { fetchWeather } from '../../js/weather.js';
 import { sunFor, phaseAt } from '../../js/sky.js';
 import { sendPush } from './webpush.js';
-import { decideNudge, recordNudge, localParts, NUDGE } from './nudge.js';
+import { decideNudge, recordNudge, localParts, NUDGE, alertsToSend } from './nudge.js';
+import { fetchAlerts, reactLine } from '../../js/alerts.js';
 import * as Mail from './mail.js';
 
 const VERSION = '3.5.0';
@@ -96,11 +97,25 @@ export async function runNudges(env, now = Date.now()) {
   const s = await loadSave(env, now); if (!s) return { skipped: 'no save' };
   const hist = (await kvJson(env, 'nudge:hist')) || {};
   const w = await weatherFor(env, s);
+  // official weather warnings first: their own channel, no daily limit
+  let warned = 0;
+  if (s.place) {
+    try {
+      const alerts = await fetchAlerts(s.place, { ua: 'pebble-burrow-helper (github.com/rob-turnbull/pebble-burrow)' });
+      const seen = (await kvJson(env, 'alerts:seen')) || {};
+      for (const a of alertsToSend(alerts, seen, now, s.tz)) {
+        warned += await broadcast(env, list, { title: `⚠️ ${a.event}`, body: `${E.first(s.beings[0])} says: ${reactLine(a)}`, tag: 'alert-' + a.id.slice(-12) });
+        seen[a.id] = a.ends || now + 864e5;
+      }
+      for (const [id, until] of Object.entries(seen)) if (until < now - 864e5) delete seen[id];
+      await env.BURROW.put('alerts:seen', JSON.stringify(seen));
+    } catch { /* the NWS is sometimes busy */ }
+  }
   const n = decideNudge(s, now, hist, w?.kind);
-  if (!n) return { skipped: 'nothing to say' };
+  if (!n) return warned ? { warned } : { skipped: 'nothing to say' };
   const sent = await broadcast(env, list, n);
   await env.BURROW.put('nudge:hist', JSON.stringify(recordNudge(hist, n, now, s.tz)));
-  return { sent, nudge: n.key };
+  return { sent, warned, nudge: n.key };
 }
 
 /* ---------------- AI visitor (MCP) ---------------- */

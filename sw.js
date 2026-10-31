@@ -1,12 +1,12 @@
 // Offline support. Bump VERSION whenever you deploy changes so phones pick them up.
-const VERSION = 'pebble-burrow-v3.19.0';
+const VERSION = 'pebble-burrow-v3.20.0';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
-  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js', './js/conditions.js', './js/outfits.js', './js/diary.js', './js/friends.js', './js/garden.js', './js/visitors.js', './js/photo.js', './js/horizon.js', './js/wishes.js', './js/util.js', './js/views.js', './js/fireworks.js', './js/night.js',
+  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js', './js/conditions.js', './js/outfits.js', './js/diary.js', './js/friends.js', './js/garden.js', './js/visitors.js', './js/photo.js', './js/horizon.js', './js/wishes.js', './js/util.js', './js/views.js', './js/fireworks.js', './js/night.js', './js/alerts.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 // Live data must never come from cache.
-const NETWORK_ONLY = ['api.github.com', 'gist.githubusercontent.com', 'api.open-meteo.com', 'geocoding-api.open-meteo.com', 'api.bigdatacloud.net'];
+const NETWORK_ONLY = ['api.weather.gov', 'api.github.com', 'gist.githubusercontent.com', 'api.open-meteo.com', 'geocoding-api.open-meteo.com', 'api.bigdatacloud.net'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
