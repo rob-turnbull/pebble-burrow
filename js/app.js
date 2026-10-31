@@ -208,7 +208,7 @@ function redrawBeings(idx) {
   }));
 }
 
-let reportOpen = (() => { try { return localStorage.getItem('pebble-burrow-report') !== '0'; } catch { return true; } })();
+let reportOpen = (() => { try { return localStorage.getItem('pebble-burrow-report') === '1'; } catch { return false; } })();
 function reportHTML() {
   if (!S.place) return `<section class="report empty"><span>☀️ no weather yet</span><button class="linkbtn" id="rep-town">add your town</button><span class="hint">and the pets will dress for it.</span></section>`;
   const w = env.wx, c = env.c;
@@ -336,7 +336,7 @@ function renderBurrow() {
   <header class="top">
     <div><h1>${esc(S.owner)}${/s$/i.test(S.owner) ? "'" : "'s"} burrow</h1>
       <p class="sub">${S.beings.map(b => esc(E.first(b))).join(' & ')} · together since ${fmtDay(S.created)}</p></div>
-    <div class="row"><span id="syncpill" class="pill"></span><button class="ghost icon" id="snd" aria-pressed="${Snd.enabled}" aria-label="${Snd.enabled ? 'turn sound off' : 'turn sound on'}">${Snd.enabled ? '🔊' : '🔇'}</button><button class="ghost" id="gear">${view === 'settings' ? 'back to the burrow' : 'settings'}</button></div>
+    <div class="row"><span id="syncpill" class="pill"></span><button class="ghost icon" id="snd" aria-pressed="${Snd.enabled}" aria-label="${Snd.enabled ? 'turn sound off' : 'turn sound on'}">${Snd.enabled ? '🔊' : '🔇'}</button></div>
   </header>
   ${scene === 'room'
   ? `<div class="stage room ${party ? 'party' : ''}" id="stage" data-phase="day">${R.roomHTML(S, { arranging, pick: pickSlot, draw: drawBeing })}
@@ -356,10 +356,12 @@ function renderBurrow() {
     ${party ? `<div class="banner">🎂 happy birthday, ${esc(S.owner)}! they knew.</div>` : seasonal().costume ? `<div class="banner">🎃 happy halloween!</div>` : ''}
     <div class="beings">${S.beings.map((b, i) => `<button class="being" data-i="${i}" aria-label="${esc(b.name)}, ${SPECIES[b.sp].label}">${drawBeing(b)}<span class="shadow"></span></button>`).join('')}</div>
   </div>`}
-  <div id="below"></div>`;
+  <div id="below"></div>
+  <nav class="tabs" id="tabs" aria-label="sections">${TABS.map(([id, e, label]) => `<button data-tab="${id}" aria-label="${label}"><span class="t-e" aria-hidden="true">${e}</span><span class="t-l">${label}</span><span class="t-badge" data-badge="${id}" hidden></span></button>`).join('')}</nav>`;
   on('gear', () => { view = view === 'settings' ? 'burrow' : 'settings'; confirmReset = false; panelNote = ''; helperNote = ''; renderBurrow(); if (view === 'settings') checkHelper(); });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => goTab(b.dataset.tab));
   on('snd', () => { const v = Snd.toggle(); const b = $('snd'); b.textContent = v ? '🔊' : '🔇'; b.setAttribute('aria-pressed', v); b.setAttribute('aria-label', v ? 'turn sound off' : 'turn sound on'); Snd.ambience(env.kind, env.phase); });
-  on('wxchip', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
+  on('wxchip', () => { goTab('settings'); $('place-q')?.focus(); });
   const stage = $('stage');
   if (scene === 'hill') { fx = new WeatherFX(stage); fx.onThunder = () => setTimeout(() => Snd.play('thunder'), 600 + Math.random() * 900); } else fx = null;
   on('snap', takePhoto);
@@ -394,12 +396,14 @@ function update() {
     if (hungry && !t) { t = document.createElement('span'); t.className = 'thought'; t.textContent = '🧀'; el.appendChild(t); } if (!hungry && t) t.remove();
   });
   const below = $('below'); if (!below) return;
-  if (view === 'settings') { below.innerHTML = settingsHTML(); wireSettings(); return; }
+  if (view === 'settings') tab = 'settings'; else if (tab === 'settings') tab = 'hill';
+  paintTabs();
+  if (tab === 'settings') { below.innerHTML = settingsHTML(); wireSettings(); return; }
   const b = S.beings[sel];
+  if (tab !== 'hill') { below.innerHTML = `<div class="stack">${tabBody(tab)}<p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p></div>`; wireBelow(below, b); return; }
   below.innerHTML = `
   <div class="stack">
   ${diaryHTML()}
-  ${reportHTML()}
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
     <div class="actions">
@@ -415,24 +419,21 @@ function update() {
       ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
       : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
+  ${reportHTML()}
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
   ${friendHTML()}
-  ${gardenHTML()}
-  <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
-    ${S.log.length ? `<ol>${S.log.slice(0, 8).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed and pick a cheese, the first one goes in the book.</p>`}
-  </section>
-  ${postHTML()}
   ${scene === 'room' ? roomPanelHTML() : ''}
-  ${visitorBookHTML()}
-  ${albumHTML()}
-  ${photosHTML()}
   ${installHTML()}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
+  wireBelow(below, b);
+}
+
+function wireBelow(below, b) {
   on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(P.T(S.beings[sel]).wake)); }));
   on('diary-close', () => { DIARY = null; try { localStorage.removeItem('pebble-burrow-diary'); } catch {} update(); });
   on('rep-toggle', () => { reportOpen = !reportOpen; try { localStorage.setItem('pebble-burrow-report', reportOpen ? '1' : '0'); } catch {} update(); });
-  on('rep-town', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
+  on('rep-town', () => { goTab('settings'); $('place-q')?.focus(); });
   on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
   on('play-together', () => { gamesOpen = false; together(true); });
   on('a-games', () => { gamesOpen = !gamesOpen; cheeseOpen = false; washMode = false; update(); });
@@ -464,6 +465,35 @@ function update() {
     E.setWear(S, x, w.dataset.wear === x.wear ? '' : w.dataset.wear); touch(); update(); if (x.wear) say(i, E.rand(['do i look fancy?', 'i feel very important now', 'is it on straight?'])); });
   const rf = $('rnf'); if (rf) rf.onsubmit = e => { e.preventDefault(); const v = $('rn').value.trim(); if (v) E.rename(S, S.beings[renaming], v.slice(0, 32)); renaming = -1; touch(); renderBurrow(); };
   on('rnx', () => { renaming = -1; update(); });
+}
+
+const TABS = [['hill', '🏡', 'hill'], ['garden', '🌱', 'garden'], ['album', '📖', 'album'], ['post', '💌', 'post'], ['settings', '⚙️', 'settings']];
+let tab = (() => { try { const t = localStorage.getItem('pebble-burrow-tab'); return TABS.some(x => x[0] === t) && t !== 'settings' ? t : 'hill'; } catch { return 'hill'; } })();
+function goTab(t) {
+  const was = view;
+  tab = t; view = t === 'settings' ? 'settings' : 'burrow';
+  cheeseOpen = gamesOpen = false; confirmReset = false; panelNote = ''; helperNote = '';
+  try { localStorage.setItem('pebble-burrow-tab', t); } catch {}
+  if (t === 'settings' && was !== 'settings') checkHelper();
+  if (t === 'post') { loadMail(true); }
+  update();
+  $('below')?.scrollIntoView?.({ block: 'nearest' });
+  Snd.play('tap');
+}
+function paintTabs() {
+  document.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false'); });
+  const badge = (id, n) => { const el = document.querySelector(`[data-badge="${id}"]`); if (!el) return; el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n || ''); };
+  badge('garden', (S.garden || []).filter(p => p.seed && p.growth >= 1).length);
+  badge('post', MB ? MB.cards.filter(c => c.t > (D.mailSeen || 0)).length + MB.requests.length : 0);
+  badge('hill', DIARY?.entries?.length && tab !== 'hill' ? 1 : 0);
+}
+function tabBody(t) {
+  if (t === 'garden') return gardenHTML();
+  if (t === 'post') return postHTML();
+  if (t === 'album') return `${albumHTML()}${photosHTML()}${visitorBookHTML()}
+    <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
+    ${S.log.length ? `<ol>${S.log.slice(0, 12).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed on the hill and pick a cheese, the first one goes in the book.</p>`}</section>`;
+  return '';
 }
 
 function cardHTML(b, i) {

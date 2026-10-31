@@ -199,6 +199,8 @@ export function forecastLine(b, c, w) {
   if (c.wet && soon.length && soon.every(h => !['rain', 'drizzle', 'storm'].includes(h.kind))) return 'it should dry up soon. maybe a rainbow?';
   const drop = soon.length ? soon[soon.length - 1].temp - (w?.temp ?? 0) : 0;
   if (drop <= -8) return { shy: 'getting colder later. extra blanket tonight.', bouncy: 'it’s getting chilly! more boinging to stay warm', sleepy: 'colder later. good. more snuggling.', curious: `it’ll drop ${Math.abs(drop)} degrees. where does the warm go?`, bold: 'a cold front approaches. i’m ready.' }[t];
+  if (c.storm) return { shy: 'big storm. i\u2019m staying under the blanket.', bouncy: 'THUNDER! (i\u2019m not scared) (a bit scared)', sleepy: 'storm lullaby. perfect.', curious: 'i counted between the flash and the boom!', bold: 'storm\u2019s here. the burrow holds.' }[t];
+  if (c.wet) return { shy: 'rainy. i\u2019ll be by the window.', bouncy: 'rain all day = puddles all day!', sleepy: 'rain on the roof. best nap sound.', curious: 'where does all the rain go after?', bold: 'a bit of rain never stopped me.' }[t];
   if (c.snow) return 'snow day! nobody tell the clouds to stop.';
   if (c.hot) return 'hot one. i’ll be in the shade, being a puddle.';
   if (c.windy) return 'windy all afternoon. hold onto your hats.';
