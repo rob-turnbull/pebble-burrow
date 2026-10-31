@@ -21,3 +21,14 @@ test('colour shifts stay close to the species colour', () => {
   assert.match(shade('#eb9459', 10, -5), /^#[0-9a-f]{6}$/);
   assert.equal(shade('#808080', 0, 0), '#808080');
 });
+
+test('all sixteen species draw, with faces and room for outfits', async () => {
+  const { SPECIES } = await import('../js/data.js');
+  const { anchors } = await import('../js/outfits.js');
+  assert.equal(Object.keys(SPECIES).length, 16);
+  for (const sp of Object.keys(SPECIES)) {
+    const svg = art(sp, { genes: genesOf({ id: 'id-' + sp }) });
+    assert.match(svg, /class="pupils"/, sp); assert.match(svg, /class="eye-closed"/, sp);
+    const A = anchors({ id: 'id-' + sp, sp }); assert.ok(A.feet > A.t && A.rx > 0, sp);
+  }
+});

@@ -73,7 +73,7 @@ export function play(name, opts) {
 }
 
 /** Voice pitch for a being: small beings squeak higher. */
-export const voiceOf = sp => ({ mouse: 1.5, axolotl: 1.35, frog: 1.1, fox: 1.2, owl: 0.85, sheep: 1.0, hedgehog: 1.25, mole: 0.9 })[sp] || 1;
+export const voiceOf = sp => ({ mouse: 1.5, axolotl: 1.35, frog: 1.1, fox: 1.2, owl: 0.85, sheep: 1.0, hedgehog: 1.25, mole: 0.9, bunny: 1.4, duckling: 1.55, redpanda: 1.15, otter: 1.1, penguin: 1.3, bear: 0.8, snail: 0.95, bat: 1.45 })[sp] || 1;
 
 /* ---------------- ambience ---------------- */
 function stopAmbience() { if (amb) { const a = amb; amb = null; ambKind = ''; try { a.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.4); setTimeout(() => a.nodes.forEach(n => n.stop?.()), 1500); } catch {} } }

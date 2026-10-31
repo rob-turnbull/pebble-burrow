@@ -58,7 +58,15 @@ export function geom(sp) {
     hedgehog: () => Object.assign(G, { ey: 76, edx: 11, cy: 86, my: 92, body: [65, 80, 42, 32] }),
     owl: () => Object.assign(G, { ey: 62, edx: 13, er: 6, cy: 74, my: -99, body: [65, 74, 38, 40] }),
     axolotl: () => Object.assign(G, { ey: 74, edx: 17, cy: 84, my: 86, body: [65, 80, 40, 32] }),
-    mole: () => Object.assign(G, { ey: 66, edx: 13, er: 3, cy: 78, my: 92, body: [65, 78, 40, 34] })
+    mole: () => Object.assign(G, { ey: 66, edx: 13, er: 3, cy: 78, my: 92, body: [65, 78, 40, 34] }),
+    bunny: () => Object.assign(G, { ey: 70, edx: 12, cy: 80, my: 86, body: [65, 78, 37, 34] }),
+    duckling: () => Object.assign(G, { ey: 64, edx: 12, cy: 76, my: -99, body: [65, 76, 38, 36] }),
+    redpanda: () => Object.assign(G, { ey: 68, edx: 13, cy: 80, my: 88, body: [65, 77, 38, 35] }),
+    otter: () => Object.assign(G, { ey: 66, edx: 12, cy: 78, my: 86, body: [65, 77, 36, 37] }),
+    penguin: () => Object.assign(G, { ey: 60, edx: 11, cy: 70, my: -99, body: [65, 74, 36, 40] }),
+    bear: () => Object.assign(G, { ey: 68, edx: 13, cy: 80, my: 88, body: [65, 77, 40, 36] }),
+    snail: () => Object.assign(G, { ey: 74, edx: 10, er: 4.5, cy: 84, my: 88, body: [50, 86, 30, 26] }),
+    bat: () => Object.assign(G, { ey: 70, edx: 12, cy: 80, my: 86, body: [65, 78, 34, 32] })
   })[sp]?.();
   G.top = SPECIES[sp].top; G.feet = G.body[1] + G.body[3];
   return G;
@@ -151,6 +159,41 @@ export function art(sp, opts = {}) {
     case 'mole':
       body = `<ellipse cx="65" cy="78" rx="40" ry="34" fill="${c}"/><ellipse cx="40" cy="104" rx="11" ry="6" fill="#f0a9bb"/><ellipse cx="90" cy="104" rx="11" ry="6" fill="#f0a9bb"/>`;
       front = `<ellipse cx="65" cy="80" rx="9" ry="7" fill="#f0a9bb"/>`; break;
+    case 'bunny': {
+      const flop = g ? g.markSeed % 3 === 0 : false, inner = '#f4bccb';
+      back = flop
+        ? `<ellipse cx="34" cy="62" rx="10" ry="26" fill="${c}" transform="rotate(28 34 62)"/><ellipse cx="96" cy="62" rx="10" ry="26" fill="${c}" transform="rotate(-28 96 62)"/><ellipse cx="34" cy="64" rx="5" ry="18" fill="${inner}" transform="rotate(28 34 64)"/><ellipse cx="96" cy="64" rx="5" ry="18" fill="${inner}" transform="rotate(-28 96 64)"/>`
+        : `<ellipse class="ear" cx="50" cy="26" rx="10" ry="28" fill="${c}" transform="rotate(-8 50 26)"/><ellipse class="ear" cx="80" cy="26" rx="10" ry="28" fill="${c}" transform="rotate(8 80 26)"/><ellipse cx="50" cy="28" rx="5" ry="20" fill="${inner}" transform="rotate(-8 50 28)"/><ellipse cx="80" cy="28" rx="5" ry="20" fill="${inner}" transform="rotate(8 80 28)"/><circle cx="102" cy="100" r="9" fill="#fff"/>`;
+      body = `<ellipse cx="65" cy="78" rx="37" ry="34" fill="${c}"/><ellipse cx="65" cy="92" rx="20" ry="13" fill="${shade(c, 0, 8)}"/>`;
+      front = `<path d="M62 79 h6 l-3 4z" fill="#e58aa0"/>`; break; }
+    case 'duckling':
+      back = `<path class="crest" d="M60 42 q2 -12 6 -2 q4 -10 5 3" stroke="${shade(c, -6, -6)}" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="30" cy="84" rx="10" ry="17" fill="${shade(c, -4, -6)}" transform="rotate(20 30 84)"/><ellipse cx="100" cy="84" rx="10" ry="17" fill="${shade(c, -4, -6)}" transform="rotate(-20 100 84)"/>`;
+      body = `<ellipse cx="65" cy="76" rx="38" ry="36" fill="${c}"/><ellipse cx="50" cy="111" rx="9" ry="4" fill="#f08a24"/><ellipse cx="80" cy="111" rx="9" ry="4" fill="#f08a24"/>`;
+      front = `<ellipse cx="65" cy="76" rx="11" ry="6" fill="#f08a24"/><path d="M55 76 h20" stroke="#d06a10" stroke-width="1.4"/>`; break;
+    case 'redpanda':
+      back = `<path class="tail" d="M96 96 q34 4 28 -32 q-4 0 -8 4 q2 20 -24 20z" fill="${c}"/><path d="M118 70 l5 4 M121 80 l5 2 M118 90 l4 3" stroke="${shade(c, 0, -22)}" stroke-width="4" stroke-linecap="round"/><path d="M34 52 l6 -22 l18 16z" fill="${c}"/><path d="M96 52 l-6 -22 l-18 16z" fill="${c}"/><path d="M39 46 l3 -10 l9 8z" fill="#fff"/><path d="M91 46 l-3 -10 l-9 8z" fill="#fff"/>`;
+      body = `<ellipse cx="65" cy="77" rx="38" ry="35" fill="${c}"/><ellipse cx="65" cy="100" rx="28" ry="10" fill="${shade(c, 0, -26)}"/>`;
+      front = `<ellipse cx="65" cy="84" rx="16" ry="11" fill="#fff6ee"/><ellipse cx="${65 - 13}" cy="62" rx="7" ry="5" fill="#fff6ee"/><ellipse cx="${65 + 13}" cy="62" rx="7" ry="5" fill="#fff6ee"/><ellipse cx="65" cy="81" rx="4" ry="3" fill="${DARK}"/>`; break;
+    case 'otter':
+      back = `<path class="tail" d="M92 104 q26 6 30 -10 q-6 6 -28 0z" fill="${shade(c, 0, -8)}"/><circle cx="42" cy="48" r="7" fill="${c}"/><circle cx="88" cy="48" r="7" fill="${c}"/>`;
+      body = `<ellipse cx="65" cy="77" rx="36" ry="37" fill="${c}"/><ellipse cx="65" cy="90" rx="22" ry="20" fill="${shade(c, 0, 24, -10)}"/>`;
+      front = `<ellipse cx="65" cy="80" rx="14" ry="9" fill="${shade(c, 0, 28, -12)}"/><ellipse cx="65" cy="78" rx="4.5" ry="3" fill="${DARK}"/><path d="M52 80 l-9 -2 M52 83 l-9 1 M78 80 l9 -2 M78 83 l9 1" stroke="${shade(c, 0, -20)}" stroke-width="1.2"/><g class="pebble"><ellipse cx="65" cy="100" rx="9" ry="6" fill="#a7b3c2"/><ellipse cx="51" cy="98" rx="6" ry="5" fill="${c}"/><ellipse cx="79" cy="98" rx="6" ry="5" fill="${c}"/></g>`; break;
+    case 'penguin':
+      back = `<ellipse class="flip" cx="30" cy="80" rx="8" ry="20" fill="${c}" transform="rotate(18 30 80)"/><ellipse class="flip" cx="100" cy="80" rx="8" ry="20" fill="${c}" transform="rotate(-18 100 80)"/>`;
+      body = `<ellipse cx="65" cy="74" rx="36" ry="40" fill="${c}"/><ellipse cx="65" cy="82" rx="26" ry="31" fill="#fbfaf5"/><path d="M42 58 q23 -26 46 0 q-23 10 -46 0z" fill="${c}"/><ellipse cx="52" cy="113" rx="9" ry="4" fill="#f08a24"/><ellipse cx="78" cy="113" rx="9" ry="4" fill="#f08a24"/>`;
+      front = `<path d="M59 70 L71 70 L65 78Z" fill="#f08a24"/>`; break;
+    case 'bear':
+      back = `<circle cx="36" cy="46" r="13" fill="${c}"/><circle cx="94" cy="46" r="13" fill="${c}"/><circle cx="36" cy="46" r="6.5" fill="${shade(c, 0, 16)}"/><circle cx="94" cy="46" r="6.5" fill="${shade(c, 0, 16)}"/>`;
+      body = `<ellipse cx="65" cy="77" rx="40" ry="36" fill="${c}"/><ellipse cx="65" cy="96" rx="22" ry="12" fill="${shade(c, 0, 14)}"/>`;
+      front = `<ellipse cx="65" cy="83" rx="14" ry="10" fill="${shade(c, 0, 22, -8)}"/><ellipse cx="65" cy="80" rx="5" ry="3.5" fill="${DARK}"/>`; break;
+    case 'snail': {
+      const shell = g ? shade('#d99a6c', g.hue * 2, g.light) : '#d99a6c';
+      back = `<circle cx="84" cy="70" r="34" fill="${shell}"/><path d="M84 70 m-24 0 a24 24 0 1 1 24 24 a16 16 0 1 1 -16 -16 a9 9 0 1 1 9 9" stroke="${shade(shell, 0, -18)}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+      body = `<path d="M18 112 q-4 -30 18 -44 q22 -12 28 18 l10 26 q14 6 46 2 q4 6 -6 8 h-90 q-8 0 -6 -10z" fill="${c}"/><path class="stalk" d="M34 58 q-6 -16 -10 -22 M48 56 q4 -16 4 -24" stroke="${c}" stroke-width="4" stroke-linecap="round" fill="none"/><circle cx="24" cy="36" r="4" fill="${c}"/><circle cx="52" cy="32" r="4" fill="${c}"/>`; break; }
+    case 'bat':
+      back = `<path class="wing" d="M34 70 q-26 -16 -32 6 q8 -4 10 6 q8 -6 12 4 q6 -8 12 0z" fill="${shade(c, 0, -12)}"/><path class="wing" d="M96 70 q26 -16 32 6 q-8 -4 -10 6 q-8 -6 -12 4 q-6 -8 -12 0z" fill="${shade(c, 0, -12)}"/><path d="M40 52 l4 -26 l16 20z" fill="${c}"/><path d="M90 52 l-4 -26 l-16 20z" fill="${c}"/><path d="M44 46 l2 -12 l8 9z" fill="#f4bccb"/><path d="M86 46 l-2 -12 l-8 9z" fill="#f4bccb"/>`;
+      body = `<ellipse cx="65" cy="78" rx="34" ry="32" fill="${c}"/><ellipse cx="65" cy="92" rx="18" ry="12" fill="${shade(c, 0, 14)}"/>`;
+      front = `<path d="M60 89 l2 4 l2 -4 M66 89 l2 4 l2 -4" fill="#fff"/>`; break;
   }
   const spread = g ? g.spread : 0, er = G.er * (g ? g.eyeScale : 1), style = g ? g.eye : 'round';
   const L = 65 - G.edx - spread, R = 65 + G.edx + spread, ey = G.ey;

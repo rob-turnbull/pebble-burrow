@@ -6,6 +6,7 @@ import { temperamentOf } from './personality.js';
 
 function rng(seed) { let h = 2166136261; for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return () => { h += 0x6D2B79F5; let t = Math.imul(h ^ (h >>> 15), 1 | h); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const PERIOD = 30 * 60e3;
+const WATERY = new Set(['frog', 'axolotl', 'duckling', 'otter', 'penguin']);   // these head for the puddle instead of a coat
 const HEAD_WEARS = ['flowers', 'pumpkin', 'party', 'bow'];
 const COATS = ['#f6cf4f', '#e57fa8', '#7fb8d6', '#86c46f', '#eb9459', '#b48ce0'];
 
@@ -27,9 +28,9 @@ export const ITEMS = {
   nightcap:  { slot: 'head', label: 'nightcap', when: c => c.night, w: t => t === 'sleepy' ? 3 : t === 'shy' ? 1.2 : 0.7,
     draw: A => `<g class="flutter"><path d="M${A.hx - 22} ${A.t + 8} q8 -34 38 -26 q16 6 26 26 q-14 -8 -22 -4 q4 6 0 8 z" fill="${A.c1}"/><path d="M${A.hx - 16} ${A.t - 8} l10 -4 M${A.hx - 4} ${A.t - 14} l10 -2" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".7"/><circle cx="${A.hx + 42}" cy="${A.t + 8}" r="5.5" fill="#fff"/><rect x="${A.hx - 24}" y="${A.t + 3}" width="46" height="7" rx="3.5" fill="#fff"/></g>` },
 
-  raincoat:  { slot: 'body', label: 'raincoat', when: c => c.wet, w: (t, sp) => sp === 'frog' || sp === 'axolotl' ? 0.2 : t === 'shy' ? 2.2 : 1.4,
+  raincoat:  { slot: 'body', label: 'raincoat', when: c => c.wet, w: (t, sp) => WATERY.has(sp) ? 0.2 : t === 'shy' ? 2.2 : 1.4,
     draw: A => `${A.lower('#f6cf4f')}<path d="M${A.hx - 10} ${A.y0 + 2} l10 10 l10 -10" stroke="#e0ad1f" stroke-width="3" fill="none"/><circle cx="${A.hx}" cy="${A.y0 + 18}" r="2.2" fill="#e0ad1f"/><circle cx="${A.hx}" cy="${A.y0 + 26}" r="2.2" fill="#e0ad1f"/>` },
-  puffer:    { slot: 'body', label: 'puffy coat', when: c => c.cold && !c.warm, w: (t, sp) => sp === 'sheep' ? 0.3 : t === 'bold' ? 0.6 : 1.4,
+  puffer:    { slot: 'body', label: 'puffy coat', when: c => c.cold && !c.warm, w: (t, sp) => sp === 'sheep' || sp === 'penguin' || sp === 'bear' ? 0.3 : t === 'bold' ? 0.6 : 1.4,
     draw: A => `${A.lower(A.c1)}${[8, 16, 24].map(d => `<path d="M${A.bx - A.rx * 0.82} ${A.y0 + d} q${A.rx * 0.82} 6 ${A.rx * 1.64} 0" stroke="${A.c2}" stroke-width="2" fill="none" opacity=".7"/>`).join('')}` },
   cape:      { slot: 'back', label: 'tiny cape', when: c => c.storm || c.gale || (c.windy && !c.wet), w: t => t === 'bold' ? 4 : t === 'bouncy' ? 1.2 : 0.3,
     draw: A => `<path class="cape" d="M${A.bx - A.rx * 0.6} ${A.by - A.ry * 0.55} L${A.bx - A.rx - 14} ${A.feet} L${A.bx + A.rx + 14} ${A.feet} L${A.bx + A.rx * 0.6} ${A.by - A.ry * 0.55} z" fill="#d9534f"/>` },
@@ -39,13 +40,13 @@ export const ITEMS = {
   sunglasses:{ slot: 'face', label: 'sunglasses', when: c => c.day && (c.bright || c.hot), w: t => t === 'bold' || t === 'bouncy' ? 2.5 : 1,
     draw: A => `<g><rect x="${A.L - A.er - 4}" y="${A.ey - A.er - 2}" width="${2 * A.er + 8}" height="${2 * A.er + 4}" rx="3.5" fill="#2b2230"/><rect x="${A.R - A.er - 4}" y="${A.ey - A.er - 2}" width="${2 * A.er + 8}" height="${2 * A.er + 4}" rx="3.5" fill="#2b2230"/><path d="M${A.L + A.er + 4} ${A.ey - 1} h${A.R - A.L - 2 * A.er - 8}" stroke="#2b2230" stroke-width="2.5"/><path d="M${A.L - A.er - 1} ${A.ey - A.er + 1} l4 0" stroke="#fff" stroke-width="1.5" opacity=".7"/></g>` },
 
-  umbrella:  { slot: 'hand', label: 'umbrella', when: c => c.wet, w: (t, sp) => sp === 'frog' || sp === 'axolotl' ? 0.5 : t === 'shy' ? 2.5 : 1.3,
+  umbrella:  { slot: 'hand', label: 'umbrella', when: c => c.wet, w: (t, sp) => WATERY.has(sp) ? 0.5 : t === 'shy' ? 2.5 : 1.3,
     draw: (A, c) => c.windy
       ? `<g class="flutter"><path d="M${A.hx0} ${A.hy} V${A.t - 6}" stroke="#6b6478" stroke-width="2.5"/><path d="M${A.hx0 - 26} ${A.t - 34} Q${A.hx0} ${A.t + 4} ${A.hx0 + 26} ${A.t - 34} Q${A.hx0} ${A.t - 14} ${A.hx0 - 26} ${A.t - 34}z" fill="${A.c1}"/></g>`
       : `<g><path d="M${A.hx0} ${A.hy} V${A.t - 10} M${A.hx0} ${A.hy} q0 6 -5 6" stroke="#6b6478" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M${A.hx0 - 34} ${A.t - 8} A34 30 0 0 1 ${A.hx0 + 34} ${A.t - 8} q-8.5 -6 -17 0 q-8.5 -6 -17 0 q-8.5 -6 -17 0 q-8.5 -6 -17 0z" fill="${A.c1}"/></g>` },
-  lantern:   { slot: 'hand', label: 'lantern', when: c => c.night || c.fog, w: (t, sp) => sp === 'owl' ? 0.4 : t === 'shy' || t === 'sleepy' ? 2 : 1.3,
+  lantern:   { slot: 'hand', label: 'lantern', when: c => c.night || c.fog, w: (t, sp) => sp === 'owl' || sp === 'bat' ? 0.3 : t === 'shy' || t === 'sleepy' ? 2 : 1.3,
     draw: A => `<g><circle class="glow" cx="${A.hx0}" cy="${A.hy + 4}" r="16" fill="#f6cf4f" opacity=".35"/><path d="M${A.hx0 - 5} ${A.hy - 8} q5 -8 10 0" stroke="#6b6478" stroke-width="2" fill="none"/><rect x="${A.hx0 - 7}" y="${A.hy - 6}" width="14" height="18" rx="3" fill="#ffe9a8" stroke="#8b6a4c" stroke-width="2"/><rect x="${A.hx0 - 8}" y="${A.hy + 11}" width="16" height="3" fill="#8b6a4c"/></g>` },
-  flashlight:{ slot: 'hand', label: 'flashlight', when: c => c.night, w: (t, sp) => sp === 'owl' ? 0.3 : t === 'curious' ? 3 : t === 'bold' ? 2 : 0.8,
+  flashlight:{ slot: 'hand', label: 'flashlight', when: c => c.night, w: (t, sp) => sp === 'owl' || sp === 'bat' ? 0.2 : t === 'curious' ? 3 : t === 'bold' ? 2 : 0.8,
     draw: A => `<g><path class="beam" d="M${A.hx0 + 8} ${A.hy - 2} L${A.hx0 + 70} ${A.hy - 26} L${A.hx0 + 70} ${A.hy + 18} Z" fill="#fff6c4" opacity=".35"/><rect x="${A.hx0 - 8}" y="${A.hy - 5}" width="17" height="8" rx="2" fill="#6b6478" transform="rotate(-12 ${A.hx0} ${A.hy})"/></g>` },
   fireflies: { slot: 'hand', label: 'jar of fireflies', when: c => c.night && (c.warm || c.season === 'summer'), w: t => t === 'curious' || t === 'shy' ? 2.5 : 1.2,
     draw: A => `<g><rect x="${A.hx0 - 8}" y="${A.hy - 8}" width="16" height="20" rx="4" fill="#dff3ff" fill-opacity=".35" stroke="#9ab" stroke-width="1.5"/><rect x="${A.hx0 - 9}" y="${A.hy - 11}" width="18" height="4" rx="1.5" fill="#8b6a4c"/>${[[-3, -2], [3, 3], [-2, 7]].map(([x, y], i) => `<circle class="fly" style="animation-delay:-${i * 0.6}s" cx="${A.hx0 + x}" cy="${A.hy + y}" r="1.8" fill="#f6ff8a"/>`).join('')}</g>` },
@@ -60,7 +61,7 @@ export const ITEMS = {
   snowball:  { slot: 'hand', label: 'snowball', when: c => c.snow, w: t => t === 'bouncy' || t === 'bold' ? 3 : 1,
     draw: A => `<circle cx="${A.hx0}" cy="${A.hy - 2}" r="8" fill="#fff" stroke="#dde6f0" stroke-width="1.5"/>` },
 
-  puddle:    { slot: 'ground', label: 'puddle', when: c => c.wet && !c.freezing, w: (t, sp) => sp === 'frog' || sp === 'axolotl' ? 5 : t === 'bouncy' ? 3 : 0.6, act: 'splash',
+  puddle:    { slot: 'ground', label: 'puddle', when: c => c.wet && !c.freezing, w: (t, sp) => WATERY.has(sp) ? 5 : t === 'bouncy' ? 3 : 0.6, act: 'splash',
     draw: A => `<ellipse cx="65" cy="${A.feet + 2}" rx="46" ry="7" fill="#7fb8d6" opacity=".7"/><g class="drops"><circle cx="30" cy="${A.feet - 6}" r="2.5" fill="#bfe0f0"/><circle cx="100" cy="${A.feet - 9}" r="2" fill="#bfe0f0"/><circle cx="22" cy="${A.feet - 14}" r="1.6" fill="#bfe0f0"/></g>` },
   snowman:   { slot: 'ground', label: 'tiny snowman', when: c => c.snow, w: t => t === 'curious' || t === 'bouncy' ? 2.5 : 1.2,
     draw: A => `<g transform="translate(-14 0)"><circle cx="8" cy="${A.feet - 8}" r="10" fill="#fff" stroke="#dde6f0"/><circle cx="8" cy="${A.feet - 24}" r="7" fill="#fff" stroke="#dde6f0"/><circle cx="5.5" cy="${A.feet - 25}" r="1" fill="#2b2230"/><circle cx="10.5" cy="${A.feet - 25}" r="1" fill="#2b2230"/><path d="M8 ${A.feet - 23} l6 1.5 l-6 1z" fill="#f08a24"/></g>` },

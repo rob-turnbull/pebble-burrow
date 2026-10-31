@@ -7,7 +7,15 @@ export const SPECIES = {
   hedgehog:{ label: 'button hog',   c: '#a98266', top: 30, secret: "the spikes are just for show. inside i'm all buttons." },
   owl:     { label: 'pebble owl',   c: '#9ca8cc', top: 30, secret: "i stay up a bit so you don't have to." },
   axolotl: { label: 'pond lotl',    c: '#f4aac0', top: 44, secret: "i can regrow a smile. i've done it twice today." },
-  mole:    { label: 'velvet mole',  c: '#74687e', top: 42, secret: "i dug a little tunnel to your birthday. shh." }
+  mole:    { label: 'velvet mole',  c: '#74687e', top: 42, secret: "i dug a little tunnel to your birthday. shh." },
+  bunny:   { label: 'clover bunny', c: '#efe4d6', top: 34, secret: "i can hear you coming from three hills away. i always run to the door." },
+  duckling:{ label: 'puddle duck',  c: '#f6d867', top: 36, secret: "i practise quacking quietly so i don't wake you." },
+  redpanda:{ label: 'ember panda',  c: '#c8613a', top: 36, secret: "i've been counting the stripes on my tail. there's one for every day we've had." },
+  otter:   { label: 'river otter',  c: '#9a7457', top: 38, secret: "this is my favourite pebble. i want you to have it. (i'll keep it safe for you.)" },
+  penguin: { label: 'tuxedo chick', c: '#3e4a63', top: 30, secret: "i'm not cold, i'm just dressed for a party." },
+  bear:    { label: 'honey cub',    c: '#a87452', top: 30, secret: "i hibernate a little bit every afternoon. it's practice." },
+  snail:   { label: 'shell snail',  c: '#b8d49a', top: 42, secret: "my shell is a burrow too. you're invited." },
+  bat:     { label: 'dusk bat',     c: '#6d5b86', top: 34, secret: "i hang upside down so i can see the hill the other way." }
 };
 
 export const CHEESES = [
