@@ -18,22 +18,49 @@ export const KIND_LABEL = { clear: 'clear', clouds: 'cloudy', fog: 'foggy', driz
 export const kindIcon = (kind, night) => ({ clear: night ? '🌙' : '☀️', clouds: '☁️', fog: '🌫️', drizzle: '🌦️', rain: '🌧️', snow: '❄️', storm: '⛈️' })[kind] || '☁️';
 export const isCold = (w, units) => !!w && (units === 'C' ? w.temp <= 4 : w.temp <= 40);
 
-export async function fetchWeather(place, units = 'F') {
-  const q = new URLSearchParams({
-    latitude: place.lat, longitude: place.lon,
-    current: 'temperature_2m,weather_code,wind_speed_10m,is_day',
-    daily: 'sunrise,sunset', timezone: 'auto', timeformat: 'unixtime', forecast_days: '1',
+export async function fetchWeather(place, units = 'F', prev = null) {
+  const base = {
+    latitude: place.lat, longitude: place.lon, timezone: 'auto', timeformat: 'unixtime',
     temperature_unit: units === 'C' ? 'celsius' : 'fahrenheit', wind_speed_unit: units === 'C' ? 'kmh' : 'mph'
-  });
-  const r = await fetch(`${FORECAST}?${q}`);
-  if (!r.ok) throw new Error(`weather service answered ${r.status}`);
-  const j = await r.json();
-  return {
-    code: j.current.weather_code, kind: kindFromCode(j.current.weather_code),
-    temp: Math.round(j.current.temperature_2m), wind: Math.round(j.current.wind_speed_10m),
-    sunrise: j.daily.sunrise[0] * 1000, sunset: j.daily.sunset[0] * 1000,
-    units, fetchedAt: Date.now(), for: `${place.lat},${place.lon}`
   };
+  // Rich request first: extras come from hourly data, which every Open-Meteo version supports.
+  const rich = new URLSearchParams({ ...base, forecast_days: '2',
+    current: 'temperature_2m,weather_code,wind_speed_10m,is_day',
+    hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation_probability,wind_gusts_10m,cloud_cover,uv_index',
+    daily: 'sunrise,sunset,temperature_2m_max,temperature_2m_min' });
+  let r = await fetch(`${FORECAST}?${rich}`);
+  if (r.status === 400) r = await fetch(`${FORECAST}?${new URLSearchParams({ ...base, forecast_days: '1', current: 'temperature_2m,weather_code,wind_speed_10m,is_day', daily: 'sunrise,sunset' })}`);
+  if (!r.ok) throw new Error(`weather service answered ${r.status}`);
+  return parseWeather(await r.json(), place, units, prev);
+}
+
+/** Turn an Open-Meteo response into what the burrow needs. Exported for tests. */
+export function parseWeather(j, place, units, prev, now = Date.now()) {
+  const kind = kindFromCode(j.current.weather_code);
+  const w = {
+    code: j.current.weather_code, kind,
+    temp: Math.round(j.current.temperature_2m), wind: Math.round(j.current.wind_speed_10m), isDay: !!j.current.is_day,
+    sunrise: j.daily.sunrise[0] * 1000, sunset: j.daily.sunset[0] * 1000,
+    hi: j.daily.temperature_2m_max ? Math.round(j.daily.temperature_2m_max[0]) : null,
+    lo: j.daily.temperature_2m_min ? Math.round(j.daily.temperature_2m_min[0]) : null,
+    units, fetchedAt: now, for: `${place.lat},${place.lon}`, hours: []
+  };
+  const h = j.hourly;
+  if (h && h.time) {
+    let i = h.time.findIndex(t => t * 1000 > now) - 1; if (i < 0) i = 0;
+    const at = (k, n) => h[k] && h[k][n] != null ? h[k][n] : null;
+    w.feels = at('apparent_temperature', i) != null ? Math.round(at('apparent_temperature', i)) : w.temp;
+    w.humidity = at('relative_humidity_2m', i);
+    w.gust = at('wind_gusts_10m', i) != null ? Math.round(at('wind_gusts_10m', i)) : w.wind;
+    w.cloud = at('cloud_cover', i);
+    w.uv = at('uv_index', i);
+    for (let n = i + 1; n <= i + 6 && n < h.time.length; n++)
+      w.hours.push({ t: h.time[n] * 1000, temp: Math.round(at('temperature_2m', n)), kind: kindFromCode(at('weather_code', n)), pop: at('precipitation_probability', n) });
+  } else { w.feels = w.temp; w.gust = w.wind; }
+  // remember the last wet moment, for rainbows
+  const wet = ['rain', 'drizzle', 'storm'].includes(kind);
+  w.wetAt = wet ? now : prev?.wetAt || 0;
+  return w;
 }
 
 export async function searchPlaces(name) {

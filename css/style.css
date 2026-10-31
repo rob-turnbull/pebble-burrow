@@ -395,3 +395,79 @@ button.door:focus-visible{outline:3px solid var(--butter);outline-offset:3px}
 .friends li{display:flex;justify-content:space-between;gap:10px}
 #n-mail{flex:1 1 200px;min-width:0;border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--well);font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .sheet .field textarea{font-family:var(--body);font-size:15px}
+
+/* ---------------- weather on the hill ---------------- */
+.grass{position:absolute;left:0;right:0;bottom:30px;height:26px;pointer-events:none;z-index:1}
+.grass i{position:absolute;bottom:0;width:10px;height:16px;transform-origin:50% 100%;animation:grass 3.2s ease-in-out infinite;
+  background:linear-gradient(var(--hill2),var(--hill2)) 2px 4px/2px 12px no-repeat,linear-gradient(var(--hill2),var(--hill2)) 6px 0/2px 16px no-repeat}
+.c-windy .grass i{animation-duration:.9s}.c-gale .grass i{animation-duration:.55s}
+.c-windy .flower{animation:sway 1.2s ease-in-out infinite;transform-origin:50% 100%}
+.c-windy .wx-clouds span{animation-duration:22s!important}
+.c-windy .drift{animation-name:leafwind!important;animation-duration:4s!important}
+.rainbow{position:absolute;left:8%;right:8%;top:16%;aspect-ratio:2/1;max-width:100%;border-radius:50% 50% 0 0;opacity:0;transition:opacity 3s;pointer-events:none;
+  background:radial-gradient(circle at 50% 100%,transparent 54%,#b48ce088 55%,#7fb8d688 59%,#86c46f88 63%,#f6cf4f88 67%,#eb945988 71%,#e5737388 75%,transparent 76%)}
+.c-rainbow .rainbow{opacity:.9}
+.glare{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s;background:radial-gradient(circle at 18% 12%,#fff8d6cc,transparent 45%)}
+.c-bright .glare,.c-hot .glare{opacity:1}
+.c-hot .orb{transform:scale(1.25);box-shadow:0 0 0 14px #f6cf4f40,0 0 70px #f6a04a88}
+.shimmer{position:absolute;left:0;right:0;bottom:30px;height:90px;pointer-events:none;opacity:0;
+  background:repeating-linear-gradient(0deg,transparent 0 6px,#fff3 6px 7px);filter:blur(2px);animation:shimmer 2.4s ease-in-out infinite}
+.c-hot .shimmer{opacity:.6}
+.frost{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s;z-index:3;
+  box-shadow:inset 0 0 40px 10px #f2f8ffcc;border-radius:28px;background:radial-gradient(circle at 0 0,#ffffffaa,transparent 18%),radial-gradient(circle at 100% 0,#ffffffaa,transparent 18%)}
+.c-cold .frost{opacity:.45}.c-freezing .frost{opacity:.9}
+.puff{position:absolute;width:14px;height:10px;border-radius:50%;background:#ffffffd0;pointer-events:none;z-index:6;animation:puff 1.6s ease-out forwards;filter:blur(.5px)}
+
+/* pets' weather behaviour */
+.being[data-act="splash"]{animation:bob 1.4s ease-in-out infinite}
+.being[data-act="splash"] .drops{animation:drops 1.4s ease-out infinite}
+.being[data-act="shiver"] svg{animation:shiver .18s linear infinite}
+.being[data-act="sway"] svg{animation:lean 2.4s ease-in-out infinite;transform-origin:50% 100%}
+.being[data-act="sunbathe"] svg{transform:rotate(-6deg) translateY(4px)}
+.being[data-act="tongue"] .mouth{display:none}.being[data-act="tongue"] .mouth-o{display:inline}
+.being[data-act="peer"] .pupils{transform:translate(2px,-1px)}
+.being[data-act="gaze"] .pupils{transform:translate(-1px,-2px)}
+.being .flutter{animation:flutter 1.1s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 100%}
+.being .cape{animation:cape 1.3s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 0}
+.being .glow{animation:glowp 2.2s ease-in-out infinite}
+.being .fly{animation:fly 1.8s ease-in-out infinite}
+.being .steam{animation:steam 2s ease-in-out infinite}
+.being .fanning{animation:fanning .5s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 100%}
+.being .kite{animation:kite 3s ease-in-out infinite;transform-box:view-box;transform-origin:110px 60px}
+.stage[data-phase="night"] .being .beam{opacity:.55}
+.stage[data-phase="night"] .being .glow{opacity:.6}
+.sheet svg .flutter,.sheet svg .kite{animation:none}
+
+@keyframes grass{50%{transform:rotate(9deg)}}
+@keyframes sway{50%{transform:rotate(10deg)}}
+@keyframes leafwind{0%{transform:translate(-40px,0) rotate(0)}100%{transform:translate(110vw,140px) rotate(400deg)}}
+@keyframes shimmer{50%{transform:translateY(-4px) skewX(2deg)}}
+@keyframes puff{0%{opacity:0;transform:scale(.4)}20%{opacity:1}100%{opacity:0;transform:translate(18px,-26px) scale(1.8)}}
+@keyframes drops{0%{transform:translateY(0);opacity:0}30%{opacity:1}100%{transform:translateY(-14px);opacity:0}}
+@keyframes shiver{0%,100%{transform:translateX(0)}50%{transform:translateX(1.2px)}}
+@keyframes lean{50%{transform:rotate(5deg)}}
+@keyframes flutter{50%{transform:rotate(-6deg)}}
+@keyframes cape{50%{transform:skewX(8deg) scaleX(1.06)}}
+@keyframes glowp{50%{opacity:.6}}
+@keyframes fly{50%{transform:translate(2px,-3px);opacity:.4}}
+@keyframes steam{50%{transform:translateY(-3px);opacity:.3}}
+@keyframes fanning{to{transform:rotate(-14deg)}}
+@keyframes kite{50%{transform:rotate(6deg) translateY(-4px)}}
+
+/* ---------------- weather report ---------------- */
+.report{background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.report.empty{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;font-weight:700}
+.rep-head{display:flex;justify-content:space-between;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;width:100%}
+.rep-now{display:flex;align-items:center;gap:8px;min-width:0}
+.rep-icon{font-size:26px;line-height:1}
+.rep-now strong{font-family:var(--display);font-size:24px;font-variant-numeric:tabular-nums}
+.rep-sum{font-weight:700;color:var(--ink-soft);min-width:0}
+.rep-body{display:flex;flex-direction:column;gap:10px}
+.rep-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px 12px;margin:0}
+.rep-stats div{display:flex;flex-direction:column}
+.rep-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
+.rep-stats dd{margin:0;font-weight:800;font-variant-numeric:tabular-nums}
+.rep-hours{list-style:none;margin:0;padding:8px 0 0;border-top:1px dashed var(--line);display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;text-align:center}
+.rep-hours li{display:flex;flex-direction:column;align-items:center;gap:1px;font-weight:800;font-variant-numeric:tabular-nums;font-size:13px}
+.rep-hi{font-size:18px}.rep-pop{font-size:11px;color:var(--sea);min-height:1em}
+.rep-pets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:14px}

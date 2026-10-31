@@ -58,7 +58,7 @@ export const TEMPERAMENT_IDS = Object.keys(TEMPERAMENTS);
 
 /** Stable, device-independent pick from the being's id. */
 export function temperamentOf(b) {
-  if (b.temper && TEMPERAMENTS[b.temper]) return b.temper;
+  if (b.temper && TEMPERAMENTS[b.temper]) return b.temper;   // tests (and a future picker) can pin one
   let h = 0; for (const ch of String(b.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return TEMPERAMENT_IDS[h % TEMPERAMENT_IDS.length];
 }

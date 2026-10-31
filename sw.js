@@ -1,8 +1,8 @@
 // Offline support. Bump VERSION whenever you deploy changes so phones pick them up.
-const VERSION = 'pebble-burrow-v3.6.0';
+const VERSION = 'pebble-burrow-v3.7.0';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
-  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js',
+  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js', './js/conditions.js', './js/outfits.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 // Live data must never come from cache.

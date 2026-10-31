@@ -11,6 +11,8 @@ import * as P from './personality.js';
 import * as Snd from './sound.js';
 import { GAMES, openGame } from './games.js';
 import * as R from './room.js';
+import { conditions, summary as wxSummary, icon as wxIcon } from './conditions.js';
+import * as O from './outfits.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -34,7 +36,8 @@ const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZon
 const app = document.getElementById('app');
 let stopLife = null;
 const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
-let outfitLayers = () => null;
+const outfits = {};
+let outfitLayers = b => O.layersFor(b, outfits[b.id], env.c);
 let MB = null, mbErr = '', mailAll = false;
 let gamesOpen = false, scene = 'hill', arranging = false, pickSlot = '';
 let sel = 0, washMode = false, view = 'burrow', cheeseOpen = false, renaming = -1, wearing = -1, confirmReset = false, albumAll = false;
@@ -108,7 +111,8 @@ function computeEnv(now = Date.now()) {
   const sun = sunFor(now, S?.place, wx);
   const { phase, t } = phaseAt(now, sun);
   const sea = seasonal(new Date(now), S?.place?.lat ?? 45);
-  return { phase, t, sun, wx, kind: wx ? wx.kind : 'clear', cold: isCold(wx, S?.units), sea };
+  const c = conditions({ w: wx, phase, season: sea.season, units: S?.units || 'F', now });
+  return { phase, t, sun, wx, kind: wx ? wx.kind : 'clear', cold: isCold(wx, S?.units), sea, c };
 }
 const mult = () => E.envMultipliers({ phase: env.phase, kind: env.kind, cold: env.cold });
 
@@ -117,7 +121,7 @@ async function refreshWeather(force = false) {
   const key = `${S.place.lat},${S.place.lon}`;
   const fresh = W && W.for === key && W.units === S.units && Date.now() - W.fetchedAt < WEATHER_TTL;
   if (fresh && !force) return;
-  try { W = await fetchWeather(S.place, S.units); ls.set(K.wx, W); applyEnv(); }
+  try { W = await fetchWeather(S.place, S.units, W); ls.set(K.wx, W); applyEnv(); }
   catch { /* keep last known weather; offline is fine */ }
 }
 
@@ -147,6 +151,8 @@ function applyEnv() {
       : `<span>${night ? '🌙' : '☀️'} ${env.phase}${ev}</span><span class="muted">${S.place ? esc(S.place.name) : 'add your town for weather'}</span>`;
   }
   earnEnvKeepsakes();
+  dressForWeather();
+  ['windy', 'gale', 'hot', 'cold', 'freezing', 'bright', 'rainbow'].forEach(k => st.classList.toggle('c-' + k, !!env.c?.[k]));
   if (env.wx && E.noteWeather(S, env.kind)) touch(); else if (env.wx) saveLocal();
   // a being comments when the sky, weather or season changes
   const voice = `${env.phase}|${env.kind}|${env.sea.events.join(',')}`;
@@ -159,6 +165,64 @@ function applyEnv() {
     if (line && who > -1) setTimeout(() => say(who, line, 3600), 800);
   }
   lastVoiced = voice;
+}
+
+/** Choose outfits for the weather; redraw only the pets whose outfit changed, and let one of them say something. */
+let lastDress = '';
+function dressForWeather() {
+  if (!S || !env.c) return;
+  const changed = [];
+  S.beings.forEach((b, i) => {
+    const o = O.pickOutfit(b, env.c);
+    const prev = outfits[b.id];
+    if (!prev || prev.key !== o.key || prev.items.join() !== o.items.join() || prev.wear !== b.wear) { outfits[b.id] = { ...o, wear: b.wear }; changed.push(i); }
+  });
+  if (!changed.length) return;
+  redrawBeings(changed);
+  const firstTime = lastDress === '';
+  lastDress = env.c.key;
+  let kept = false;
+  changed.forEach(i => (outfits[S.beings[i].id].items || []).forEach(it => { kept = E.keepsake(S, 'wear:' + it, '🧥', `first ${O.ITEMS[it].label} on the hill`, Date.now()) || kept; }));
+  if (kept) touch();
+  const talk = changed.filter(i => !S.beings[i].napping && outfits[S.beings[i].id].line);
+  if (talk.length) setTimeout(() => { const i = E.rand(talk); say(i, outfits[S.beings[i].id].line, 4200); }, firstTime ? 2600 : 900);
+}
+
+/** Swap a pet's drawing in place (keeps speech bubbles, sponge, animations). */
+function redrawBeings(idx) {
+  idx.forEach(i => document.querySelectorAll(`.being[data-i="${i}"]`).forEach(el => {
+    const old = el.querySelector('svg'); if (!old) return;
+    const tmp = document.createElement('div'); tmp.innerHTML = drawBeing(S.beings[i]);
+    old.replaceWith(tmp.firstElementChild);
+    el.dataset.act = outfits[S.beings[i].id]?.act || '';
+  }));
+}
+
+let reportOpen = (() => { try { return localStorage.getItem('pebble-burrow-report') !== '0'; } catch { return true; } })();
+function reportHTML() {
+  if (!S.place) return `<section class="report empty"><span>☀️ no weather yet</span><button class="linkbtn" id="rep-town">add your town</button><span class="hint">and the pets will dress for it.</span></section>`;
+  const w = env.wx, c = env.c;
+  if (!w) return `<section class="report empty"><span>${esc(S.place.name)}</span><span class="hint">checking the weather…</span></section>`;
+  const u = S.units, night = env.phase === 'night', windU = u === 'C' ? 'km/h' : 'mph';
+  const fmtH = t => new Date(t).toLocaleTimeString([], { hour: 'numeric' });
+  return `<section class="report">
+    <button class="rep-head" id="rep-toggle" aria-expanded="${reportOpen}">
+      <span class="rep-now"><span class="rep-icon">${c.rainbow ? '🌈' : wxIcon(w.kind, night)}</span><strong>${w.temp}°</strong><span class="rep-sum">${esc(wxSummary(c))}</span></span>
+      <span class="hint">${esc(S.place.name)} ${reportOpen ? '▴' : '▾'}</span></button>
+    ${reportOpen ? `<div class="rep-body">
+      <dl class="rep-stats">
+        <div><dt>feels like</dt><dd>${w.feels ?? w.temp}°${u}</dd></div>
+        <div><dt>wind</dt><dd>${w.wind}${w.gust && w.gust > w.wind + 4 ? `–${w.gust}` : ''} ${windU}</dd></div>
+        ${w.humidity != null ? `<div><dt>humidity</dt><dd>${Math.round(w.humidity)}%</dd></div>` : ''}
+        ${w.hi != null ? `<div><dt>today</dt><dd>${w.lo}° – ${w.hi}°</dd></div>` : ''}
+        <div><dt>sunrise</dt><dd>${fmtClock(env.sun.rise)}</dd></div><div><dt>sunset</dt><dd>${fmtClock(env.sun.set)}</dd></div>
+        ${w.uv != null && !night ? `<div><dt>uv</dt><dd>${Math.round(w.uv)}</dd></div>` : ''}
+      </dl>
+      ${w.hours?.length ? `<ol class="rep-hours">${w.hours.map(h => `<li><span class="hint">${fmtH(h.t)}</span><span class="rep-hi">${wxIcon(h.kind, new Date(h.t).getHours() >= 19 || new Date(h.t).getHours() < 6)}</span><span>${h.temp}°</span>${h.pop != null && h.pop >= 20 ? `<span class="rep-pop">${h.pop}%</span>` : '<span class="rep-pop"></span>'}</li>`).join('')}</ol>` : ''}
+      <ul class="rep-pets">${S.beings.map(b => `<li><strong>${esc(E.first(b))}:</strong> “${esc(O.forecastLine(b, c, w))}”</li>`).join('')}</ul>
+      <p class="hint">updated ${fmtAgo(w.fetchedAt)} · <a href="https://open-meteo.com/" target="_blank" rel="noopener">weather by Open-Meteo</a></p>
+    </div>` : ''}
+  </section>`;
 }
 
 /** Keepsakes that come from the world rather than from care. */
@@ -254,6 +318,8 @@ function restoreCode(code, noteEl) {
 /* ---------------- burrow ---------------- */
 function renderBurrow() {
   if (view === 'setup') view = 'burrow';
+  env = computeEnv();
+  if (S) S.beings.forEach(b => { if (!outfits[b.id] || outfits[b.id].wear !== b.wear) { const o = O.pickOutfit(b, env.c); outfits[b.id] = { ...o, wear: b.wear }; } });
   const party = E.isBirthday(S);
   lastDecor = '';
   app.innerHTML = `
@@ -268,8 +334,9 @@ function renderBurrow() {
       <button class="doorbtn" id="go-out">🚪 outside</button>
     </div>`
   : `<div class="stage ${party ? 'party' : ''}" id="stage" data-phase="day">
-    <div class="sky-dim"></div><div id="orb" class="orb"></div>
+    <div class="sky-dim"></div><div class="rainbow" aria-hidden="true"></div><div id="orb" class="orb"></div><div class="glare" aria-hidden="true"></div>
     <div class="hill back"></div><button class="door" id="go-in" aria-label="go inside the burrow"><i></i></button><div class="hill"></div>
+    <div class="grass" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="left:${4 + i * 11.5}%;animation-delay:-${(i * 0.37).toFixed(2)}s"></i>`).join('')}</div><div class="frost" aria-hidden="true"></div><div class="shimmer" aria-hidden="true"></div>
     <div class="decor" id="decor"></div>
     <span class="flower" style="left:6%"></span><span class="flower blue" style="left:16%;bottom:30px"></span><span class="flower" style="right:24%;bottom:26px"></span>
     <button class="wxchip" id="wxchip" aria-label="weather and time of day"></button>
@@ -308,6 +375,7 @@ function update() {
     el.classList.toggle('worried', !b.napping && (b.full < 30 || b.clean < 30 || b.joy < 25));
     el.dataset.wear = b.wear || '';
     el.dataset.stage = E.stageOf(b);
+    el.dataset.act = outfits[b.id]?.act || '';
     let z = el.querySelector('.zzz'); if (b.napping && !z) { z = document.createElement('span'); z.className = 'zzz'; z.textContent = 'z'; el.appendChild(z); } if (!b.napping && z) z.remove();
     let t = el.querySelector('.thought'); const hungry = !b.napping && b.full < 30;
     if (hungry && !t) { t = document.createElement('span'); t.className = 'thought'; t.textContent = '🧀'; el.appendChild(t); } if (!hungry && t) t.remove();
@@ -317,6 +385,7 @@ function update() {
   const b = S.beings[sel];
   below.innerHTML = `
   <div class="stack">
+  ${reportHTML()}
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
     <div class="actions">
@@ -343,6 +412,8 @@ function update() {
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
   on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(P.T(S.beings[sel]).wake)); }));
+  on('rep-toggle', () => { reportOpen = !reportOpen; try { localStorage.setItem('pebble-burrow-report', reportOpen ? '1' : '0'); } catch {} update(); });
+  on('rep-town', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
   on('a-games', () => { gamesOpen = !gamesOpen; cheeseOpen = false; washMode = false; update(); });
   below.querySelectorAll('[data-game]').forEach(g => g.onclick = () => startGame(g.dataset.game));
@@ -713,6 +784,25 @@ function copyField(id, msg, set) {
 }
 
 /* ---------------- boot & loops ---------------- */
+function weatherLife() {
+  if (!S || document.visibilityState !== 'visible' || !env.c) return;
+  S.beings.forEach((b, i) => {
+    if (b.napping) return;
+    const act = outfits[b.id]?.act;
+    if ((env.c.cold || env.c.freezing) && Math.random() < 0.5) puff(i);
+    if (act === 'tongue' && Math.random() < 0.4) fx_(i, '❄️', 1);
+    if (act === 'splash' && Math.random() < 0.3) { anim(i, 'boing'); if (Math.random() < 0.3) Snd.play('bubble'); }
+    if (act === 'gaze' && Math.random() < 0.2) flash(i, 'surprised', 900);
+  });
+}
+function puff(i) {
+  const st = $('stage'), el = beingEl(i); if (!st || !el) return;
+  const r = st.getBoundingClientRect(), br = el.getBoundingClientRect();
+  const p = document.createElement('span'); p.className = 'puff';
+  p.style.left = (br.left - r.left + br.width * 0.62) + 'px'; p.style.top = (br.top - r.top + br.height * 0.58) + 'px';
+  st.appendChild(p); setTimeout(() => p.remove(), 1700);
+}
+
 function chatter() {
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
@@ -748,6 +838,7 @@ async function boot() {
   setInterval(tick, 30e3);
   setInterval(() => { if (S && document.visibilityState === 'visible') loadMail(); }, 5 * 60e3);
   setInterval(chatter, 80e3);
+  setInterval(weatherLife, 3500);
   setInterval(() => refreshWeather(), 10 * 60e3);
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
