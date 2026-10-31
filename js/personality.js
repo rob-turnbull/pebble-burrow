@@ -56,6 +56,14 @@ export const TEMPERAMENTS = {
 };
 export const TEMPERAMENT_IDS = Object.keys(TEMPERAMENTS);
 
+export const BEDTIME = {
+  shy: { yawn: 'i\u2019m getting sleepy… will you tuck me in?', night: 'goodnight. thank you for today.', morning: 'good morning. i dreamt you were here, and you are.' },
+  bouncy: { yawn: 'i\u2019m not tired! *enormous yawn*', night: 'okay okay, sleeping. tomorrow we boing MORE.', morning: 'MORNING! i\u2019m fully charged!' },
+  sleepy: { yawn: 'bedtime. my favourite time. tuck me in?', night: 'zzz… already asleep… zzz', morning: 'is it morning already? five more minutes… okay, hi.' },
+  curious: { yawn: 'one more question before bed… why is the moon round?', night: 'goodnight. i\u2019ll tell you my dreams in the morning.', morning: 'good morning! i dreamt about a cheese shaped like a moon.' },
+  bold: { yawn: 'i\u2019ll guard the burrow tonight… after a little rest.', night: 'goodnight, chief. the burrow is safe.', morning: 'morning patrol: all clear. and i\u2019m well rested.' }
+};
+
 /** Stable, device-independent pick from the being's id. */
 export function temperamentOf(b) {
   if (b.temper && TEMPERAMENTS[b.temper]) return b.temper;   // tests (and a future picker) can pin one

@@ -56,3 +56,14 @@ test('games are no-lose: even a zero score earns joy, and the first play is kept
   assert.equal(E.gamesPlayed(s), 2);
   assert.equal(s.album.filter(k => k.k === 'game:catch').length, 1);
 });
+
+test('tucked in: nothing decays overnight, and morning brings them back well rested', () => {
+  const s = burrow(), b = s.beings[0]; b.full = 50; b.joy = 50;
+  assert.equal(E.tuck(s, b, T0), true); assert.equal(b.napping, true); assert.equal(b.joy, 58);
+  E.catchUp(s, T0 + 9 * 3600e3); assert.equal(b.full, 50, 'asleep, so no decay');
+  const woke = E.goodMorning(s, T0 + 9 * 3600e3);
+  assert.equal(woke.length, 1); assert.equal(woke[0].rested, true);
+  assert.equal(b.napping, false); assert.equal(b.joy, 68); assert.equal(b.bedtime, 0);
+  assert.equal(E.goodMorning(s, T0 + 10 * 3600e3).length, 0, 'only once');
+  assert.equal(E.tuck(s, s.beings[1], T0), true); E.wake(s, s.beings[1], T0 + 3600e3); assert.equal(s.beings[1].bedtime, 0, 'woken early');
+});

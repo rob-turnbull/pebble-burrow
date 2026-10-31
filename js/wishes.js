@@ -24,6 +24,7 @@ export const WISHES = {
   photo:    { e: '📷', ev: 'photo', who: 'any', need: 1, text: () => 'take our picture!' },
   inside:   { e: '🏠', ev: 'inside', who: 'any', need: 1, text: () => 'let’s go inside for a bit' },
   secret:   { e: '🤫', ev: 'secret', who: 'self', need: 1, text: () => 'tap me lots. i have a secret.' },
+  tuck:     { e: '🌙', ev: 'tuck', who: 'self', need: 1, ok: () => true, text: () => 'tuck me in tonight' },
   dress:    { e: '🎀', ev: 'wear', who: 'self', need: 1, ok: (c, s, b) => b.days.length >= 7, text: () => 'help me pick something to wear' }
 };
 const BY_TEMPER = { shy: ['hug', 'secret', 'photo', 'inside'], bouncy: ['boing', 'catch', 'together', 'seek'], sleepy: ['inside', 'hug', 'cheese', 'snack'], curious: ['visitor', 'seek', 'plant', 'photo'], bold: ['boing', 'catch', 'water', 'together'] };

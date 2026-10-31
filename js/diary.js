@@ -80,7 +80,9 @@ export function writeDiary(s, from, to, ctx = {}) {
   });
   if (rumbles.length > 1 && Math.abs(rumbles[0].t - rumbles[1].t) < 2 * 36e5) out.push({ t: Math.min(rumbles[0].t, rumbles[1].t), e: '🍽️', text: `both tummies started rumbling at once. they called it a duet.` });
   else rumbles.forEach(({ i, t }) => out.push({ t, e: '🍽️', text: `${names[i]}'s tummy started rumbling. ${names[(i + 1) % names.length]} heard it from across the hill.` }));
-  if (hours >= 10) out.push({ t: from + 10 * 36e5, e: '🛏️', text: `everyone settled in for a long nap, keeping your spot warm.` });
+  const tucked = s.beings.filter(b => b.bedtime);
+  if (tucked.length) out.push({ t: from + 60e3, e: '🌙', text: `${tucked.map(b => b.name.split(' ')[0]).join(' and ')} slept soundly after being tucked in.` });
+  if (hours >= 10 && !tucked.length) out.push({ t: from + 10 * 36e5, e: '🛏️', text: `everyone settled in for a long nap, keeping your spot warm.` });
   (ctx.extra || []).forEach(x => { if (x.t >= from && x.t <= to) out.push(x); });
   out.sort((a, b) => a.t - b.t);
   return out.length > 7 ? [out[0], ...out.slice(-6)] : out;

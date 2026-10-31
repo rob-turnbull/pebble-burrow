@@ -407,7 +407,8 @@ function update() {
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
     <div class="actions">
-      ${b.napping ? `<button class="act wake" id="a-wake"><span class="ic">✨</span>wake ${esc(E.first(b))}</button>` : ''}
+      ${b.napping ? `<button class="act wake" id="a-wake"><span class="ic">${b.bedtime ? '🌅' : '✨'}</span>${b.bedtime ? `wake ${esc(E.first(b))} early` : `wake ${esc(E.first(b))}`}</button>` : ''}
+      ${!b.napping && bedtimeNow() ? `<button class="act wake tuck" id="a-tuck"><span class="ic">🌙</span>tuck ${esc(E.first(b))} in</button>` : ''}
       <button class="act ${cheeseOpen ? 'on' : ''}" id="a-feed"><span class="ic">🧀</span>feed</button>
       <button class="act ${washMode ? 'on' : ''}" id="a-wash"><span class="ic">🧽</span>${washMode ? 'auto-wash' : 'wash'}</button>
       <button class="act" id="a-play"><span class="ic">🎈</span>boing</button>
@@ -436,6 +437,7 @@ function wireBelow(below, b) {
   on('diary-close', () => { DIARY = null; try { localStorage.removeItem('pebble-burrow-diary'); } catch {} update(); });
   on('rep-toggle', () => { reportOpen = !reportOpen; try { localStorage.setItem('pebble-burrow-report', reportOpen ? '1' : '0'); } catch {} update(); });
   on('rep-town', () => { goTab('settings'); $('place-q')?.focus(); });
+  on('a-tuck', () => tuckIn(sel));
   on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
   on('play-together', () => { gamesOpen = false; together(true); });
   on('a-games', () => { gamesOpen = !gamesOpen; cheeseOpen = false; washMode = false; update(); });
@@ -880,6 +882,38 @@ function noteAway(now = Date.now()) {
   return true;
 }
 
+/* ---------------- bedtime & morning ---------------- */
+// Bedtime is after dark and after 8pm local; morning is when the sun is up.
+function bedtimeNow(now = new Date()) { return (env.phase === 'night' || env.phase === 'dusk') && (now.getHours() >= 20 || now.getHours() < 5); }
+function tuckIn(i) {
+  const b = S.beings[i];
+  if (!care(i, (s, x, now) => E.tuck(s, x, now, D.dev))) return;
+  wish('tuck', i);
+  fx_(i, '🌙', 1); Snd.play('hug'); flash(i, 'happy', 1200);
+  setTimeout(() => say(i, P.BEDTIME[P.temperamentOf(b)].night, 3600), 300);
+  if (E.keepsake(S, 'tuck:first', '🌙', `tucked ${E.first(b)} in for the first time`, Date.now())) touch();
+  const awake = S.beings.findIndex(x => !x.napping);
+  if (awake < 0) { setTimeout(() => { if (scene === 'hill') { scene = 'room'; renderBurrow(); } }, 2600); if (E.keepsake(S, 'tuck:all:' + E.localDate(Date.now(), S.tz), '🛏️', 'everyone tucked in, all cosy', Date.now())) touch(); }
+  else { sel = awake; update(); }
+}
+function morningCheck() {
+  if (!S || !(env.phase === 'dawn' || env.phase === 'day')) return;
+  const woke = E.goodMorning(S);
+  if (!woke.length) return;
+  touch(); if (scene === 'room') scene = 'hill';
+  renderBurrow();
+  woke.forEach(({ b, rested }, k) => { const i = S.beings.indexOf(b); setTimeout(() => { flash(i, 'happy', 2000); if (rested) fx_(i, '☀️', 1); say(i, P.BEDTIME[P.temperamentOf(b)].morning, 4200); }, 900 + k * 2200); });
+  E.keepsake(S, 'morning:first', '🌅', 'the first morning after being tucked in', Date.now()) && touch();
+}
+let yawnAt = 0;
+function bedtimeYawn() {
+  if (!S || !bedtimeNow() || Date.now() - yawnAt < 8 * 60e3) return false;
+  const up = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!up.length) return false;
+  yawnAt = Date.now(); const i = E.rand(up);
+  say(i, P.BEDTIME[P.temperamentOf(S.beings[i])].yawn, 4200); flash(i, 'blink', 600);
+  return true;
+}
+
 /* ---------------- doorbell ---------------- */
 let RINGS = [], bellAddr = '', ringsAt = 0;
 const RING_E = { text: '💬', email: '✉️', call: '📞', other: '🔔' };
@@ -1195,6 +1229,7 @@ function viewPhoto(id) {
 }
 
 function chatter() {
+  if (bedtimeYawn()) return;
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
   const i = E.rand(awake); say(i, E.rand(P.T(S.beings[i]).idle), 3400);
@@ -1208,6 +1243,7 @@ function tick() {
   E.catchUp(S, Date.now(), mult());
   saveLocal();
   applyEnv();
+  morningCheck();
   gardenTick();
   if (!washMode && renaming < 0 && !busyTyping()) update();
   S.beings.forEach((b, i) => { if (b.napping && !before[i]) say(i, 'getting sleepy… just a little nap.'); });

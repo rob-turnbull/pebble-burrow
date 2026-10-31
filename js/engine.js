@@ -127,7 +127,7 @@ function cared(s, b, now, dev) {
 
 export function wake(s, b, now = Date.now(), dev = 'here') {
   if (!b.napping) return false;
-  b.napping = false;
+  b.napping = false; b.bedtime = 0;
   b.full = Math.max(b.full, WAKE_FLOOR.full);
   b.clean = Math.max(b.clean, WAKE_FLOOR.clean);
   b.joy = Math.max(b.joy, WAKE_FLOOR.joy);
@@ -147,6 +147,28 @@ export function feed(s, b, cheese, now = Date.now(), dev = 'here', by) {
 }
 export function play(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 18); b.full = clamp(b.full - 3); bump(b, 'boings', dev); cared(s, b, now, dev); }
 export function hug(s, b, now = Date.now(), dev = 'here') { b.joy = clamp(b.joy + 10); bump(b, 'hugs', dev); cared(s, b, now, dev); }
+
+/** Tuck a pet in for the night: they sleep (nothing decays) until morning, and wake well rested. */
+export function tuck(s, b, now = Date.now(), dev = 'here') {
+  if (b.napping) return false;
+  b.joy = clamp(b.joy + 8); b.napping = true; b.bedtime = now;
+  bump(b, 'tucks', dev); cared(s, b, now, dev);
+  return true;
+}
+/** Morning: wake anyone who was tucked in. Well rested = a bit of everything back. Returns who woke. */
+export function goodMorning(s, now = Date.now()) {
+  const woke = [];
+  s.beings.forEach(b => {
+    if (!b.bedtime || !b.napping) return;
+    const slept = (now - b.bedtime) / H;
+    b.napping = false; b.bedtime = 0;
+    if (slept >= 5) { b.joy = clamp(b.joy + 10); b.clean = clamp(b.clean + 5); }
+    b.full = Math.max(b.full, WAKE_FLOOR.full); b.statsAt = now; b.tick = Math.max(b.tick, now);
+    woke.push({ b, rested: slept >= 5 });
+  });
+  if (woke.length) s.updatedAt = Math.max(s.updatedAt || 0, now);
+  return woke;
+}
 export function scrub(s, b, amt, now = Date.now()) { b.clean = clamp(b.clean + amt); b.statsAt = now; const done = b.clean >= 100; if (done) cared(s, b, now); return done; }
 export function rename(s, b, name, now = Date.now()) { b.name = name; b.nameAt = now; s.updatedAt = now; }
 export function setWear(s, b, wear, now = Date.now()) { b.wear = wear; b.wearAt = now; s.updatedAt = now; }
@@ -257,7 +279,7 @@ export function merge(a, b) {
     if ((y.nameAt || 0) > (x.nameAt || 0)) { x.name = y.name; x.nameAt = y.nameAt; }
     if ((y.wearAt || 0) > (x.wearAt || 0)) { x.wear = y.wear; x.wearAt = y.wearAt; }
     if (y.statsAt > x.statsAt || (y.statsAt === x.statsAt && y.tick > x.tick)) {
-      ['full', 'clean', 'joy', 'napping', 'glowUntil', 'statsAt', 'tick'].forEach(k => x[k] = y[k]);
+      ['full', 'clean', 'joy', 'napping', 'glowUntil', 'statsAt', 'tick', 'bedtime'].forEach(k => x[k] = y[k]);
     }
     for (const [k, devs] of Object.entries(y.cnt || {})) { x.cnt[k] = x.cnt[k] || {}; for (const [dev, n] of Object.entries(devs)) x.cnt[k][dev] = Math.max(x.cnt[k][dev] || 0, n); }
     x.taps = Math.max(x.taps || 0, y.taps || 0);
