@@ -74,3 +74,19 @@ test('friends list merges across devices and removals stick', () => {
   assert.equal(m.friends.length, 2);
   assert.equal(m.friends.find(f => f.addr === FRIEND).gone, true);
 });
+
+test('doorbell: rings with its own key, keeps only a label, and the owner can read and clear', async () => {
+  const Bell = await import('../worker/src/doorbell.js');
+  const { env } = harness(); env.DOORBELL_KEY = 'd'.repeat(24);
+  const ringUrl = q => worker.fetch(new Request(`https://h.example/ring/${'d'.repeat(24)}${q}`), env);
+  assert.equal((await worker.fetch(new Request(`https://h.example/ring/${'x'.repeat(24)}?kind=text`), env)).status, 404);
+  assert.equal((await ringUrl('?kind=text&from=Mom<script>')).status, 202);
+  assert.equal((await ringUrl('?kind=weird')).status, 202);
+  const r = await (await owner(env, 'GET').then(() => worker.fetch(new Request('https://h.example/rings', { headers: { Authorization: 'Bearer ' + KEY } }), env))).json();
+  assert.equal(r.rings.length, 2); assert.equal(r.rings[1].from, 'Momscript'); assert.equal(r.rings[0].kind, 'other');
+  assert.match(r.address, /\/ring\//);
+  assert.equal(Bell.ringText({ kind: 'email', from: 'work' }), 'an email from work');
+  await worker.fetch(new Request('https://h.example/rings', { method: 'POST', headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: '{}' }), env);
+  assert.equal((await Bell.recent(env.BURROW)).length, 0);
+  assert.equal((await worker.fetch(new Request('https://h.example/rings'), env)).status, 401, 'reading needs the access key');
+});

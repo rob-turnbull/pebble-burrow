@@ -57,6 +57,10 @@ export async function disableNudges(h) {
 
 export const testNudge = h => call(h, '/test', {});
 
+/* ---------------- doorbell ---------------- */
+export const getRings = h => call(h, '/rings');
+export const clearRings = (h, upTo) => call(h, '/rings', { upTo });
+
 /* ---------------- postcards ---------------- */
 export const isMailAddress = a => /^https:\/\/[^\s/]+\/mail\/[A-Za-z0-9_-]{16,}$/.test(String(a || '').trim());
 export const getMailbox = h => call(h, '/mailbox');

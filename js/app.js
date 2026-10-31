@@ -25,6 +25,7 @@ import * as AL from './alerts.js';
 import { esc, fmtAgo, fmtDay } from './util.js';
 import * as Vw from './views.js';
 import { startFireworks } from './fireworks.js';
+import { getRings, clearRings } from './helper.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -371,7 +372,7 @@ function renderBurrow() {
   stage.querySelectorAll('.being').forEach(el => el.onclick = () => { if (!washMode) tapBeing(+el.dataset.i); });
   setupWash(stage);
   if ((party || seasonal().costume) && !sessionGet('confetti')) { confetti(); sessionSet('confetti', '1'); }
-  applyEnv(); paintSync(); gardenTick(); paintAlert(); update();
+  applyEnv(); paintSync(); gardenTick(); paintAlert(); paintBell(); update();
   stopLife?.(); stopLife = startLife(S.beings.length, i => { const b = S?.beings[i]; if (!b) return null; const g = genesOf(b); return { napping: b.napping, temper: P.temperamentOf(b), joy: b.joy, eyeScale: g?.eyeScale }; });
 }
 function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -689,7 +690,7 @@ function confetti(custom) { const st = $('stage'); if (!st || matchMedia('(prefe
 /* ---------------- settings ---------------- */
 async function checkHelper() {
   const h = parseHelper(S.helper); if (!h) { helperOk = null; return; }
-  loadMail(true);
+  loadMail(true); loadRings(true);
   try { await helperStatus(h); helperOk = true; } catch (e) { helperOk = false; helperNote = e.message; }
   try { nudgesOn = !!(await currentSubscription()); } catch { nudgesOn = false; }
   if (view === 'settings' && !busyTyping()) update();
@@ -761,6 +762,8 @@ function settingsHTML() {
     ${helperNote ? `<p class="note" role="status">${esc(helperNote)}</p>` : ''}
   </section>
 
+  ${doorbellSettingsHTML()}
+
   <section class="panel">
     <h2>your horizon</h2>
     <p class="place-now">in the distance: <strong>${HZ.HORIZONS[HZ.horizonOf(S).kind].label}</strong></p>
@@ -831,6 +834,8 @@ function wireSettings() {
 
   on('s-copy', () => copyField('s-code', 'code copied.', m => panelNote = m));
   on('s-restore', () => restoreCode($('s-in').value, null));
+  on('bell-copy', () => copyField('bell-addr', 'doorbell address copied.', m => helperNote = m));
+  on('bell-test', async () => { try { await fetch(bellAddr + '?kind=text&from=the%20test%20button'); helperNote = 'rang! go back to the hill.'; ringsAt = 0; } catch (e) { helperNote = 'couldn\u2019t reach the doorbell.'; } update(); });
   on('hz-reroll', () => { if (HZ.reroll(S)) { E.setField(S, 'horizon', S.horizon); touch(); panelNote = `new view: ${HZ.HORIZONS[S.horizon.kind].label}.`; renderBurrow(); } });
   on('s-reset', () => { confirmReset = true; update(); });
   on('s-no', () => { confirmReset = false; update(); });
@@ -873,6 +878,65 @@ function noteAway(now = Date.now()) {
   DIARY = { from, to: now, entries };
   try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
   return true;
+}
+
+/* ---------------- doorbell ---------------- */
+let RINGS = [], bellAddr = '', ringsAt = 0;
+const RING_E = { text: '💬', email: '✉️', call: '📞', other: '🔔' };
+const ringText = r => `${r.kind === 'text' ? 'a text' : r.kind === 'email' ? 'an email' : r.kind === 'call' ? 'a missed call' : 'something'}${r.from ? ` from ${r.from}` : ''}`;
+async function loadRings(force = false) {
+  const h = parseHelper(S?.helper); if (!h) return;
+  if (!force && Date.now() - ringsAt < 50e3) return; ringsAt = Date.now();
+  try {
+    const r = await getRings(h); bellAddr = r.address || '';
+    const fresh = (r.rings || []).filter(x => x.t > (D.ringSeen || 0));
+    const isNew = fresh.length && fresh[0].id !== RINGS[0]?.id;
+    RINGS = fresh;
+    paintBell();
+    if (isNew && view === 'burrow' && scene === 'hill') deliverRing(fresh[0]);
+  } catch { /* helper asleep or offline */ }
+}
+function deliverRing(r) {
+  const i = S.beings.findIndex(b => !b.napping); if (i < 0) return;
+  anim(i, 'boing'); Snd.play('post'); Snd.buzz([30, 80, 30]);
+  setTimeout(() => say(i, E.rand([`psst! you\u2019ve got ${ringText(r)}!`, `ding dong! ${ringText(r)} just arrived.`, `i ran to the door: ${ringText(r)}!`]), 4600), 400);
+  if (E.keepsake(S, 'doorbell', '🔔', 'the doorbell rang for the first time', Date.now())) touch();
+}
+function paintBell() {
+  const st = $('stage'); if (!st || scene !== 'hill') return;
+  let el = $('envelope');
+  if (!RINGS.length) { el?.remove(); return; }
+  if (!el) { el = document.createElement('button'); el.id = 'envelope'; el.className = 'envelope'; st.appendChild(el); el.onclick = openRings; }
+  const r = RINGS[0];
+  el.innerHTML = `<span>${RING_E[r.kind] || '🔔'}</span>${RINGS.length > 1 ? `<b>${RINGS.length}</b>` : ''}`;
+  el.setAttribute('aria-label', `${RINGS.length} new: ${RINGS.map(ringText).join(', ')}. tap to clear`);
+}
+async function openRings() {
+  if (!RINGS.length) return;
+  const i = S.beings.findIndex(b => !b.napping);
+  if (i > -1) say(i, RINGS.length === 1 ? `it\u2019s ${ringText(RINGS[0])}. go check your phone!` : `${RINGS.length} things came: ${RINGS.slice(0, 3).map(ringText).join(', ')}.`, 5200);
+  D.ringSeen = RINGS[0].t; saveDevice();
+  const upTo = RINGS[0].t; RINGS = []; paintBell();
+  try { await clearRings(parseHelper(S.helper), upTo); } catch {}
+}
+function doorbellSettingsHTML() {
+  if (!parseHelper(S.helper)) return '';
+  if (!bellAddr) return `<section class="panel"><h2>doorbell for texts & emails</h2><p class="hint">your helper needs a quick update for the doorbell: in the worker folder, run <code>node setup.mjs</code> again.</p></section>`;
+  const a = kind => `${bellAddr}?kind=${kind}`;
+  return `<section class="panel"><h2>doorbell for texts & emails</h2>
+    <p class="hint">no web app can read your messages, so your phone rings the burrow's doorbell instead. it only sends a label like "text" (and a name you choose), never the message. a pet runs to the door with an envelope.</p>
+    <div class="field">doorbell address (keep it private)<div class="row"><input id="bell-addr" readonly value="${esc(a('text'))}"><button class="btn" id="bell-copy">copy</button></div></div>
+    <details><summary><strong>iPhone: Shortcuts</strong></summary><ol class="steps">
+      <li>open <strong>Shortcuts</strong> → <strong>Automation</strong> → <strong>+</strong> → <strong>Message</strong> (or <strong>Email</strong>).</li>
+      <li>choose the people or accounts you want, then <strong>Run Immediately</strong>.</li>
+      <li>add the action <strong>Get Contents of URL</strong> and paste the address. for email, change <code>kind=text</code> to <code>kind=email</code>. to say who it's from, add <code>&amp;from=Mom</code>.</li>
+      <li>turn off <strong>Notify When Run</strong>. done.</li></ol></details>
+    <details><summary><strong>Android: Tasker or MacroDroid</strong></summary><ol class="steps">
+      <li>make a profile triggered by <strong>Notification</strong> from your messages or email app.</li>
+      <li>add an <strong>HTTP Request</strong> (GET) action with the address.</li>
+      <li>use <code>kind=text</code>, <code>kind=email</code> or <code>kind=call</code>; add <code>&amp;from=…</code> if you like.</li></ol></details>
+    <div class="row"><button class="btn" id="bell-test">ring it now (test)</button></div>
+  </section>`;
 }
 
 /* ---------------- weather warnings ---------------- */
@@ -1165,12 +1229,13 @@ async function boot() {
 
   if (D.token) { const r = await syncAndRefresh(); if (r === 'changed' && view !== 'setup') say(0, 'caught up from your other device!', 3200); }
   refreshWeather();
-  if (S) loadMail(true);
+  if (S) { loadMail(true); loadRings(true); }
 
   setInterval(tick, 30e3);
   setInterval(() => { if (S && document.visibilityState === 'visible') loadMail(); }, 5 * 60e3);
   setInterval(chatter, 80e3);
   setInterval(() => visitorCheck(), 4 * 60e3);
+  setInterval(() => { if (S && document.visibilityState === 'visible') loadRings(); }, 60e3);
   setTimeout(() => visitorCheck(), 15e3);
   setInterval(() => { if (S && view === 'burrow' && document.visibilityState === 'visible' && !washMode && !document.querySelector('.modal') && Math.random() < 0.55) together(); }, 95e3);
   setInterval(weatherLife, 3500);
@@ -1178,7 +1243,7 @@ async function boot() {
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'hidden') { D.lastSeen = Date.now(); saveDevice(); if (dirty) syncNow(); return; }
-    if (!S) return; if (noteAway()) update(); tick(); refreshWeather(); loadMail();
+    if (!S) return; if (noteAway()) update(); tick(); refreshWeather(); loadMail(); loadRings(true);
     if (D.token && Date.now() - (D.lastSync || 0) > 60e3) syncAndRefresh();
   });
   addEventListener('online', () => { if (dirty) syncNow(); refreshWeather(); });

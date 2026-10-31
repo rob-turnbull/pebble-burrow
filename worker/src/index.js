@@ -9,6 +9,7 @@ import { sendPush } from './webpush.js';
 import { decideNudge, recordNudge, localParts, NUDGE, alertsToSend } from './nudge.js';
 import { fetchAlerts, reactLine } from '../../js/alerts.js';
 import * as Mail from './mail.js';
+import * as Bell from './doorbell.js';
 
 const VERSION = '3.5.0';
 const UA = { 'User-Agent': 'pebble-burrow-helper' };
@@ -205,6 +206,21 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url), p = url.pathname.replace(/\/+$/, '') || '/';
 
+    const bell = p.match(/^\/ring\/([^/]+)$/);
+    if (bell) {
+      const plain = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      if (!env.DOORBELL_KEY || !sameKey(bell[1], env.DOORBELL_KEY)) return new Response(JSON.stringify({ error: 'no doorbell here' }), { status: 404, headers: plain });
+      let q = Object.fromEntries(url.searchParams);
+      if (req.method === 'POST') { try { q = { ...q, ...(await req.json()) }; } catch { /* query string is enough */ } }
+      const r = await Bell.ring(env.BURROW, q);
+      if (r.ring) {
+        let name = 'someone';
+        try { const s = await loadSave(env); if (s) name = E.first(s.beings[Math.floor(Math.random() * s.beings.length)]); } catch {}
+        await notifyOwner(env, `${Bell.KINDS[r.ring.kind]} ding dong!`, `${name} ran to the door: you've got ${Bell.ringText(r.ring)}.`, 'ring');
+      }
+      return new Response(JSON.stringify(r.ring ? { ok: true } : { error: 'that\u2019s a lot of doorbells. slow down a little.' }), { status: r.status, headers: plain });
+    }
+
     const mail = p.match(/^\/mail\/([^/]+)$/);
     if (mail) {
       const open = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
@@ -245,6 +261,10 @@ export default {
     if (p === '/unsubscribe' && req.method === 'POST') {
       const { endpoint } = await req.json(); if (endpoint) await env.BURROW.delete('sub:' + await hash(endpoint));
       return json(env, { ok: true });
+    }
+    if (p === '/rings') {
+      if (req.method === 'GET') return json(env, { rings: await Bell.recent(env.BURROW), address: env.DOORBELL_KEY ? `${url.origin}/ring/${env.DOORBELL_KEY}` : '' });
+      const { upTo } = await req.json().catch(() => ({})); await Bell.clear(env.BURROW, upTo || Date.now()); return json(env, { ok: true });
     }
     if (p === '/mailbox') {
       const address = env.MAILBOX_KEY ? `${url.origin}/mail/${env.MAILBOX_KEY}` : '';

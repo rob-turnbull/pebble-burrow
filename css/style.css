@@ -624,3 +624,9 @@ body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .alert summary{cursor:pointer}.alert p{margin:6px 0 0}
 @keyframes pulse{50%{box-shadow:0 0 0 6px #d9534f33}}
 @media (max-width:440px){.alertbar{top:auto;bottom:58px;left:12px}}
+
+/* ---------------- doorbell ---------------- */
+.envelope{position:absolute;right:calc(9% - 4px);bottom:104px;z-index:6;border:0;background:#fffaf0;border-radius:10px;padding:4px 8px;font-size:20px;line-height:1;
+  box-shadow:0 3px 0 rgba(0,0,0,.12),0 0 0 3px #f6cf4f88;animation:bob 1.6s ease-in-out infinite;cursor:pointer}
+.envelope b{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:var(--rose);color:#fff;font-size:11px;line-height:18px;padding:0 4px}
+#bell-addr{flex:1 1 200px;min-width:0;border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--well);font-family:ui-monospace,Menlo,monospace;font-size:12px}

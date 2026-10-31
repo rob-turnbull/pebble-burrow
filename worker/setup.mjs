@@ -46,6 +46,7 @@ let sec = existsSync(SECRETS_FILE) ? JSON.parse(readFileSync(SECRETS_FILE, 'utf8
 if (!sec.VAPID_PUBLIC) { const v = await generateVapid(); sec.VAPID_PUBLIC = v.publicKey; sec.VAPID_PRIVATE_JWK = v.privateJwk; }
 if (!sec.ACCESS_KEY) sec.ACCESS_KEY = randomBytes(24).toString('base64url');
 if (!sec.MAILBOX_KEY) sec.MAILBOX_KEY = randomBytes(18).toString('base64url');
+if (!sec.DOORBELL_KEY) sec.DOORBELL_KEY = randomBytes(18).toString('base64url');
 if (!sec.GITHUB_TOKEN || process.argv.includes('--new-token')) {
   console.log('\nThe helper needs its own GitHub token to read and write your burrow gist.');
   console.log('Make one at https://github.com/settings/personal-access-tokens/new');
@@ -63,7 +64,7 @@ const url = (dep.out.match(/https:\/\/[a-z0-9.-]+\.workers\.dev/i) || [])[0];
 if (!url) die('deployed, but could not find the workers.dev address in:\n' + dep.out);
 
 step('storing secrets');
-for (const name of ['VAPID_PUBLIC', 'VAPID_PRIVATE_JWK', 'ACCESS_KEY', 'MAILBOX_KEY', 'GITHUB_TOKEN']) {
+for (const name of ['VAPID_PUBLIC', 'VAPID_PRIVATE_JWK', 'ACCESS_KEY', 'MAILBOX_KEY', 'DOORBELL_KEY', 'GITHUB_TOKEN']) {
   const r = wrangler(['secret', 'put', name], sec[name]);
   if (!r.ok) die(`could not store ${name}:\n${r.out}`);
   console.log(`  ${name} ✓`);
@@ -85,5 +86,8 @@ Keep those three private. Anyone with them can visit your burrow.
 
   Postcard mailbox (this one is fine to give to friends; it can only receive postcards):
     ${url}/mail/${sec.MAILBOX_KEY}
+
+  Doorbell (for your phone's Shortcuts or Tasker; it can only ring the bell):
+    ${url}/ring/${sec.DOORBELL_KEY}?kind=text
 ${SECRETS_FILE} holds your keys on this computer only (it's git-ignored).
 `);
