@@ -471,3 +471,10 @@ button.door:focus-visible{outline:3px solid var(--butter);outline-offset:3px}
 .rep-hours li{display:flex;flex-direction:column;align-items:center;gap:1px;font-weight:800;font-variant-numeric:tabular-nums;font-size:13px}
 .rep-hi{font-size:18px}.rep-pop{font-size:11px;color:var(--sea);min-height:1em}
 .rep-pets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:14px}
+
+/* ---------------- away diary ---------------- */
+.diary{background:color-mix(in srgb,var(--butter) 14%,var(--card));border:1.5px solid color-mix(in srgb,var(--butter) 50%,var(--line));border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.diary ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.diary li{display:grid;grid-template-columns:auto 1.6em 1fr;gap:6px;align-items:baseline}
+.diary .d-time{font-size:12px;font-weight:800;color:var(--ink-soft);font-variant-numeric:tabular-nums;min-width:4.6em}
+.diary .linkbtn{align-self:flex-start}

@@ -13,6 +13,7 @@ import { GAMES, openGame } from './games.js';
 import * as R from './room.js';
 import { conditions, summary as wxSummary, icon as wxIcon } from './conditions.js';
 import * as O from './outfits.js';
+import { writeDiary, awayLabel } from './diary.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -37,6 +38,8 @@ const app = document.getElementById('app');
 let stopLife = null;
 const drawBeing = (b, layers) => art(b.sp, { genes: genesOf(b), layers: layers || outfitLayers(b) });
 const outfits = {};
+const diaryHooks = [];           // other features add their own away-time events here: (save, from, to) => [{t, e, text}]
+let DIARY = (() => { try { return JSON.parse(localStorage.getItem('pebble-burrow-diary')); } catch { return null; } })();
 let outfitLayers = b => O.layersFor(b, outfits[b.id], env.c);
 let MB = null, mbErr = '', mailAll = false;
 let gamesOpen = false, scene = 'hill', arranging = false, pickSlot = '';
@@ -385,6 +388,7 @@ function update() {
   const b = S.beings[sel];
   below.innerHTML = `
   <div class="stack">
+  ${diaryHTML()}
   ${reportHTML()}
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
@@ -412,6 +416,7 @@ function update() {
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
   on('a-wake', () => care(sel, (s, x, now) => E.wake(s, x, now, D.dev), () => { sparkle(sel); say(sel, E.rand(P.T(S.beings[sel]).wake)); }));
+  on('diary-close', () => { DIARY = null; try { localStorage.removeItem('pebble-burrow-diary'); } catch {} update(); });
   on('rep-toggle', () => { reportOpen = !reportOpen; try { localStorage.setItem('pebble-burrow-report', reportOpen ? '1' : '0'); } catch {} update(); });
   on('rep-town', () => { view = 'settings'; renderBurrow(); $('place-q')?.focus(); });
   on('a-feed', () => { cheeseOpen = !cheeseOpen; gamesOpen = false; washMode = false; update(); });
@@ -803,6 +808,28 @@ function puff(i) {
   st.appendChild(p); setTimeout(() => p.remove(), 1700);
 }
 
+/** If you've been gone a while, write the diary from the save as it was when you left. */
+function noteAway(now = Date.now()) {
+  const from = D.lastSeen || S.lastTick;
+  if (!S || now - from < 45 * 60e3) return false;
+  const before = JSON.parse(JSON.stringify(S));
+  const extra = diaryHooks.flatMap(h => { try { return h(before, from, now) || []; } catch { return []; } });
+  const entries = writeDiary(before, from, now, { phaseAt: t => phaseAt(t, sunFor(t, S.place, null)).phase, extra });
+  D.lastSeen = now; saveDevice();
+  if (!entries.length) return false;
+  DIARY = { from, to: now, entries };
+  try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
+  return true;
+}
+function diaryHTML() {
+  if (!DIARY?.entries?.length) return '';
+  const t = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const day = ms => new Date(ms).toDateString() === new Date().toDateString() ? '' : new Date(ms).toLocaleDateString(undefined, { weekday: 'short' }) + ' ';
+  return `<section class="diary"><div class="row between"><h2>while you were away</h2><span class="hint">${awayLabel(DIARY.to - DIARY.from)}</span></div>
+    <ol>${DIARY.entries.map(x => `<li><span class="d-time">${day(x.t)}${t(x.t)}</span><span class="d-e" aria-hidden="true">${x.e}</span><span>${esc(x.text)}</span></li>`).join('')}</ol>
+    <button class="linkbtn" id="diary-close">close the diary</button></section>`;
+}
+
 function chatter() {
   if (!S || view !== 'burrow' || document.visibilityState !== 'visible' || washMode || Math.random() > 0.45) return;
   const awake = S.beings.map((b, i) => b.napping ? -1 : i).filter(i => i > -1); if (!awake.length) return;
@@ -811,6 +838,7 @@ function chatter() {
 
 function tick() {
   if (!S || view === 'setup') return;
+  if (document.visibilityState === 'visible') { D.lastSeen = Date.now(); saveDevice(); }
   const before = S.beings.map(b => b.napping);
   env = computeEnv();
   E.catchUp(S, Date.now(), mult());
@@ -823,6 +851,7 @@ function tick() {
 async function boot() {
   if (S) {
     if (TZ && S.tz !== TZ) { E.setField(S, 'tz', TZ); touch(); }
+    noteAway();
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();
     if (hours >= 1) { const d = hours >= 48 ? Math.round(hours / 24) + ' days' : Math.round(hours) + ' hours';
       setTimeout(() => say(0, napped ? `you were gone ${d}. we napped and kept your spot warm.` : `you're back! it's been ${d}.`, 4200), 500); }
@@ -842,8 +871,8 @@ async function boot() {
   setInterval(() => refreshWeather(), 10 * 60e3);
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') { if (dirty) syncNow(); return; }
-    if (!S) return; tick(); refreshWeather(); loadMail();
+    if (document.visibilityState === 'hidden') { D.lastSeen = Date.now(); saveDevice(); if (dirty) syncNow(); return; }
+    if (!S) return; if (noteAway()) update(); tick(); refreshWeather(); loadMail();
     if (D.token && Date.now() - (D.lastSync || 0) > 60e3) syncAndRefresh();
   });
   addEventListener('online', () => { if (dirty) syncNow(); refreshWeather(); });
