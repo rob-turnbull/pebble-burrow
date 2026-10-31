@@ -22,6 +22,7 @@ import * as HZ from './horizon.js';
 import * as WS from './wishes.js';
 import * as NT from './night.js';
 import * as AL from './alerts.js';
+import * as LT from './letters.js';
 import { esc, fmtAgo, fmtDay } from './util.js';
 import * as Vw from './views.js';
 import { startFireworks } from './fireworks.js';
@@ -283,6 +284,7 @@ function renderSetup() {
       <p class="hint">paste the same GitHub token you used there and your burrow comes across. or paste a backup code.</p>
       <div class="row"><label class="field grow">GitHub token<input id="b-token" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(D.token)}"></label><button class="btn" id="b-connect">bring it over</button></div>
       <div class="row"><label class="field grow">or a backup code<textarea id="b-code" rows="2" placeholder="paste a backup code"></textarea></label><button class="btn" id="b-restore">restore</button></div>
+      <div class="row"><label class="btn file-btn">📂 or restore from a saved file<input type="file" id="b-file" accept=".json,application/json" hidden></label></div>
       <p class="note" id="b-note" role="status"></p>
     </details>
   </section>`;
@@ -300,6 +302,7 @@ function renderSetup() {
     else note.textContent = r === 'error' ? syncMsg : `connected as ${D.user}, but there's no burrow saved yet. hatch one here and it will sync.`;
   });
   on('b-restore', () => restoreCode($('b-code').value, $('b-note')));
+  const bf = $('b-file'); if (bf) bf.onchange = () => restoreFile(bf.files[0], $('b-note'));
 }
 function keepForm(fn) {
   const o = $('owner')?.value, d = $('bd')?.value, m = $('bm')?.value;
@@ -314,6 +317,19 @@ function hatch() {
     <div class="eggs">${chosen.map(k => `<div class="egg">${eggArt(k)}</div>`).join('')}</div></div>`;
   setTimeout(() => app.querySelectorAll('.egg').forEach(e => e.classList.add('pop')), 1700);
   setTimeout(() => { view = 'burrow'; renderBurrow(); say(0, 'hello! i already like you.'); setTimeout(() => say(1, 'is that cheese i smell?'), 900); }, 2300);
+}
+async function restoreFile(f, noteEl) {
+  if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.app !== 'pebble-burrow' || !d.burrow) throw 0;
+    const n = E.migrate(d.burrow); if (!n) throw 0;
+    n.updatedAt = Date.now(); S = n; E.catchUp(S, Date.now()); touch();
+    const have = new Set(PH.list().map(p => p.id));
+    [...(d.photos || [])].reverse().forEach(p => { if (p?.id && /^data:image\/jpeg;base64,/.test(p.data || '') && !have.has(p.id)) PH.add(p); });
+    sel = 0; panelNote = `restored the burrow${d.photos?.length ? ` and ${d.photos.length} photo${d.photos.length === 1 ? '' : 's'}` : ''}.`;
+    if (view === 'setup') view = 'burrow'; renderBurrow();
+  } catch { const m = 'that file isn\u2019t a pebble burrow backup.'; if (noteEl) noteEl.textContent = m; else { panelNote = m; update(); } }
 }
 function restoreCode(code, noteEl) {
   try {
@@ -453,6 +469,8 @@ function wireBelow(below, b) {
   below.querySelectorAll('[data-req]').forEach(b => b.onclick = async () => { const h = parseHelper(S.helper), [act, sid] = b.dataset.req.split(':');
     try { await mailAction(h, act, { sid }); const r = MB.requests.find(x => x.sid === sid); if (act === 'approve' && r) E.setFriend(S, r.reply, r.name); await loadMail(true); touch(); } catch (e) { mbErr = e.message; } update(); });
   below.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => viewPhoto(b.dataset.photo));
+  below.querySelectorAll('[data-letter]').forEach(b => b.onclick = () => { letterOpen = b.dataset.letter; update(); });
+  below.querySelectorAll('[data-sendletter]').forEach(b => b.onclick = () => { const l = S.letters.find(x => x.week === b.dataset.sendletter); if (l) writePostcard(undefined, l.text.split('\n').slice(1, 3).join(' ').slice(0, 139)); });
   on('arrange', () => { arranging = !arranging; pickSlot = ''; renderBurrow(); });
   below.querySelectorAll('[data-place]').forEach(p => p.onclick = () => { R.place(S, pickSlot, p.dataset.place); pickSlot = ''; Snd.play('tap'); touch(); renderBurrow();
     const i = S.beings.findIndex(b => !b.napping); if (i > -1 && p.dataset.place) setTimeout(() => say(i, E.rand(['ooh, that looks nice there', 'cosy!', 'i like it here more every day'])), 300); });
@@ -485,16 +503,18 @@ function goTab(t) {
   Snd.play('tap');
 }
 function paintTabs() {
+  paintBadge();
   document.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false'); });
   const badge = (id, n) => { const el = document.querySelector(`[data-badge="${id}"]`); if (!el) return; el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n || ''); };
   badge('garden', (S.garden || []).filter(p => p.seed && p.growth >= 1).length);
   badge('post', MB ? MB.cards.filter(c => c.t > (D.mailSeen || 0)).length + MB.requests.length : 0);
   badge('hill', DIARY?.entries?.length && tab !== 'hill' ? 1 : 0);
+  const lastL = (S.letters || []).slice(-1)[0]; badge('album', lastL && D.letterSeen !== lastL.week ? 1 : 0);
 }
 function tabBody(t) {
   if (t === 'garden') return Vw.gardenHTML({ S, env, plantPick });
   if (t === 'post') return postHTML();
-  if (t === 'album') return `${Vw.albumHTML(S, albumAll)}${Vw.photosHTML(PH.list())}${Vw.visitorBookHTML(S)}
+  if (t === 'album') return `${lettersHTML()}${Vw.albumHTML(S, albumAll)}${Vw.photosHTML(PH.list())}${Vw.visitorBookHTML(S)}
     <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 12).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed on the hill and pick a cheese, the first one goes in the book.</p>`}</section>`;
   return '';
@@ -551,10 +571,10 @@ async function loadMail(force = false) {
   if (view === 'burrow' && !busyTyping() && !washMode) update();
 }
 
-function writePostcard(image) {
+function writePostcard(image, note) {
   if (!MB?.address) return;
   if (typeof image !== 'string') image = undefined;
-  Post.compose({ image,
+  Post.compose({ image, note,
     friends: (S.friends || []).filter(f => !f.gone), beings: S.beings.map(b => ({ name: E.first(b) })), me: S.owner,
     isAddress: isMailAddress, fx: Snd,
     addFriend: (addr, name) => { E.setFriend(S, addr, name); touch(); },
@@ -773,8 +793,10 @@ function settingsHTML() {
   </section>
 
   <section class="panel">
-    <h2>backup code</h2>
-    <p class="hint">a copy of your whole burrow as text. handy without sync, or as an extra safety net.</p>
+    <h2>backups</h2>
+    <p class="hint"><strong>everything file:</strong> your burrow plus the photos on this device, in one file. keep it somewhere safe (files, drive, email to yourself).</p>
+    <div class="row"><button class="btn" id="bk-save">💾 save everything</button><label class="btn file-btn">📂 restore from file<input type="file" id="bk-file" accept=".json,application/json" hidden></label></div>
+    <p class="hint"><strong>backup code:</strong> just the burrow, as text you can copy and paste.</p>
     <textarea id="s-code" readonly>${E.encode(S)}</textarea>
     <div class="row"><button class="btn" id="s-copy">copy code</button></div>
     <label class="field">restore from a code<textarea id="s-in" placeholder="paste a backup code here"></textarea></label>
@@ -838,6 +860,14 @@ function wireSettings() {
   on('s-restore', () => restoreCode($('s-in').value, null));
   on('bell-copy', () => copyField('bell-addr', 'doorbell address copied.', m => helperNote = m));
   on('bell-test', async () => { try { await fetch(bellAddr + '?kind=text&from=the%20test%20button'); helperNote = 'rang! go back to the hill.'; ringsAt = 0; } catch (e) { helperNote = 'couldn\u2019t reach the doorbell.'; } update(); });
+  on('bk-save', () => {
+    const data = { app: 'pebble-burrow', v: 1, saved: Date.now(), burrow: S, photos: PH.list() };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `pebble-burrow-${E.localDate(Date.now(), S.tz)}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    D.backedUp = Date.now(); saveDevice(); panelNote = `saved ${PH.list().length} photo${PH.list().length === 1 ? '' : 's'} and the whole burrow.`; update();
+  });
+  const bf = $('bk-file'); if (bf) bf.onchange = () => restoreFile(bf.files[0]);
   on('hz-reroll', () => { if (HZ.reroll(S)) { E.setField(S, 'horizon', S.horizon); touch(); panelNote = `new view: ${HZ.HORIZONS[S.horizon.kind].label}.`; renderBurrow(); } });
   on('s-reset', () => { confirmReset = true; update(); });
   on('s-no', () => { confirmReset = false; update(); });
@@ -880,6 +910,48 @@ function noteAway(now = Date.now()) {
   DIARY = { from, to: now, entries };
   try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
   return true;
+}
+
+/* ---------------- home-screen badge ---------------- */
+// Counts things that actually need you: a hungry, muddy or napping pet (not one tucked in), a ripe plant,
+// a doorbell, new post, an unread letter. Wishes don't count; they're there every day.
+function needsYou() {
+  if (!S) return 0;
+  let n = S.beings.filter(b => (b.napping && !b.bedtime) || (!b.napping && (b.full < 30 || b.clean < 30))).length;
+  n += (S.garden || []).filter(p => p.seed && p.growth >= 1).length;
+  n += RINGS.length + (MB ? MB.cards.filter(c => c.t > (D.mailSeen || 0)).length + MB.requests.length : 0);
+  const lastL = (S.letters || []).slice(-1)[0]; if (lastL && D.letterSeen !== lastL.week) n++;
+  return n;
+}
+let lastBadge = -1;
+function paintBadge() {
+  const n = needsYou(); if (n === lastBadge) return; lastBadge = n;
+  try { if (n > 0) navigator.setAppBadge?.(n); else navigator.clearAppBadge?.(); } catch {}
+  document.title = n > 0 ? `(${n}) Pebble Burrow` : 'Pebble Burrow';
+}
+
+/* ---------------- weekly letter ---------------- */
+let letterOpen = '';
+function checkLetter() {
+  if (!S) return;
+  const wk = LT.letterDue(S); if (!wk) return;
+  const prev = (S.letters || []).slice(-1)[0];
+  const L = LT.writeLetter(S, Date.now(), prev ? prev.granted : 0);
+  LT.addLetter(S, L); touch();
+  E.keepsake(S, 'letter:first', '✉️', 'the first letter from the burrow', Date.now());
+  const i = S.beings.findIndex(b => b.id === L.by);
+  if (i > -1 && view === 'burrow') setTimeout(() => say(i, 'we wrote you a letter! it\u2019s in the album.', 4600), 2000);
+  D.letterSeen = D.letterSeen || ''; saveDevice(); paintTabs();
+}
+function lettersHTML() {
+  const ls = [...(S.letters || [])].reverse(); if (!ls.length) return '';
+  const open = letterOpen || ls[0].week;
+  if (D.letterSeen !== ls[0].week) { D.letterSeen = ls[0].week; saveDevice(); }
+  return `<section class="feasts letters"><div class="row between"><h2>letters</h2><span class="hint">one every sunday</span></div>
+    ${ls.slice(0, 8).map(l => l.week === open
+      ? `<article class="letter"><p class="l-date">week of ${new Date(l.week + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</p>${l.text.split('\n').map(p => `<p>${esc(p)}</p>`).join('')}<p class="l-sign">love, ${esc(l.byName)}</p>
+        ${MB?.address ? `<button class="linkbtn" data-sendletter="${esc(l.week)}">send it to a friend as a postcard</button>` : ''}</article>`
+      : `<button class="linkbtn l-old" data-letter="${esc(l.week)}">✉️ week of ${new Date(l.week + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</button>`).join('')}</section>`;
 }
 
 /* ---------------- bedtime & morning ---------------- */
@@ -1244,6 +1316,7 @@ function tick() {
   saveLocal();
   applyEnv();
   morningCheck();
+  paintBadge();
   gardenTick();
   if (!washMode && renaming < 0 && !busyTyping()) update();
   S.beings.forEach((b, i) => { if (b.napping && !before[i]) say(i, 'getting sleepy… just a little nap.'); });
@@ -1253,6 +1326,7 @@ async function boot() {
   if (S) {
     lastLevel = F.level(S).index;
     setTimeout(checkEgg, 4000);
+    setTimeout(checkLetter, 6000);
     if (TZ && S.tz !== TZ) { E.setField(S, 'tz', TZ); touch(); }
     noteAway();
     const { hours, napped } = E.catchUp(S, Date.now()); saveLocal(); renderBurrow();
@@ -1279,7 +1353,7 @@ async function boot() {
   setInterval(() => { if (D.token && document.visibilityState === 'visible') syncAndRefresh(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'hidden') { D.lastSeen = Date.now(); saveDevice(); if (dirty) syncNow(); return; }
-    if (!S) return; if (noteAway()) update(); tick(); refreshWeather(); loadMail(); loadRings(true);
+    if (!S) return; if (noteAway()) update(); checkLetter(); tick(); refreshWeather(); loadMail(); loadRings(true);
     if (D.token && Date.now() - (D.lastSync || 0) > 60e3) syncAndRefresh();
   });
   addEventListener('online', () => { if (dirty) syncNow(); refreshWeather(); });

@@ -1,8 +1,8 @@
 // Offline support. Bump VERSION whenever you deploy changes so phones pick them up.
-const VERSION = 'pebble-burrow-v3.22.0';
+const VERSION = 'pebble-burrow-v3.23.0';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
-  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js', './js/conditions.js', './js/outfits.js', './js/diary.js', './js/friends.js', './js/garden.js', './js/visitors.js', './js/photo.js', './js/horizon.js', './js/wishes.js', './js/util.js', './js/views.js', './js/fireworks.js', './js/night.js', './js/alerts.js',
+  './js/app.js', './js/engine.js', './js/data.js', './js/art.js', './js/sky.js', './js/weather.js', './js/sync.js', './js/seasons.js', './js/helper.js', './js/personality.js', './js/sound.js', './js/games.js', './js/room.js', './js/post.js', './js/life.js', './js/conditions.js', './js/outfits.js', './js/diary.js', './js/friends.js', './js/garden.js', './js/visitors.js', './js/photo.js', './js/horizon.js', './js/wishes.js', './js/util.js', './js/views.js', './js/fireworks.js', './js/night.js', './js/alerts.js', './js/letters.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 // Live data must never come from cache.
@@ -41,6 +41,7 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
+  try { if (self.navigator.setAppBadge) self.navigator.setAppBadge(d.badge || 1); } catch {}
   e.waitUntil(self.registration.showNotification(d.title || 'pebble burrow', {
     body: d.body || 'someone on the hill is thinking about you.',
     tag: d.tag || 'pebble-burrow', renotify: true,

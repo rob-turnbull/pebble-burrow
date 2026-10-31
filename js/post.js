@@ -26,7 +26,7 @@ export function cardHTML(c, { mine = false } = {}) {
 /**
  * Open the composer. friends: [{addr,name}], beings: [{name}], send(card, to) -> Promise<string>
  */
-export function compose({ friends, beings, me, send, addFriend, isAddress, fx, image }) {
+export function compose({ friends, beings, me, send, addFriend, isAddress, fx, image, note }) {
   const root = document.createElement('div'); root.className = 'modal';
   root.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="write a postcard">
     <div class="sheet-top"><strong>💌 write a postcard</strong><button class="ghost" data-close>close</button></div>
@@ -82,6 +82,7 @@ export function compose({ friends, beings, me, send, addFriend, isAddress, fx, i
       setTimeout(close, 1400);
     } catch (e) { msg.textContent = e.message; $('pc-send').disabled = false; }
   };
+  if (note) { $('pc-note').value = note.slice(0, 140); $('pc-count').textContent = `${$('pc-note').value.length} / 140`; }
   $('pc-note').focus();
   trapFocus(root);
 }

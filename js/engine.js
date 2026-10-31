@@ -4,6 +4,7 @@ import { FIRST, LAST, STAGES } from './data.js';
 import { mergeGarden } from './garden.js';
 import { mergeVisitors } from './visitors.js';
 import { mergeWishes } from './wishes.js';
+import { mergeLetters } from './letters.js';
 
 export const SCHEMA = 3;
 export const RATE = { full: 5, clean: 2.5, joy: 3.5 }; // points lost per hour while awake
@@ -296,6 +297,7 @@ export function merge(a, b) {
   mergeGarden(out, b);
   mergeVisitors(out, b);
   mergeWishes(out, b);
+  mergeLetters(out, b);
   out.bond = { ...(out.bond || {}) }; for (const [dev, n] of Object.entries(b.bond || {})) out.bond[dev] = Math.max(out.bond[dev] || 0, n);
   const fr = new Map((out.friends || []).map(f => [f.addr, f]));
   (b.friends || []).forEach(f => { if ((f.at || 0) > (fr.get(f.addr)?.at || 0)) fr.set(f.addr, clone(f)); });

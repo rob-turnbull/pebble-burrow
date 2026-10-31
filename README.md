@@ -147,6 +147,30 @@ Each pet asks for two or three small things a day (a particular cheese, three bo
 
 The harvest festival (Nov 10–30), the first snow of each winter, new year's eve fireworks from 6pm, blossom time in early spring, and picnics on summer weekend afternoons, on top of Halloween and the winter lights.
 
+## Night sky
+
+The moon shows tonight's real phase. Clear nights get the occasional shooting star (the pets make wishes), many more on meteor shower nights (Quadrantids, Lyrids, Eta Aquariids, Perseids, Orionids, Leonids, Geminids). Full moons, showers and your first shooting star go in the album.
+
+## Bedtime and morning
+
+After 8pm on dark evenings the pets yawn and a **tuck in** button appears. Tucked-in pets sleep through the night with nothing decaying; once everyone's in, the scene moves to the bedroom. At sunrise they wake by themselves, well rested, with a good-morning line.
+
+## Weather warnings
+
+In the US, active National Weather Service warnings for your town show as a banner on the hill and above the weather report (with the official instructions). Pets react: tornado, storm and wind warnings send them into a blanket fort. With the helper, each new warning is pushed once; quiet hours hold back all but Severe and Extreme.
+
+## Doorbell for texts and emails
+
+No web app can read your messages, so your phone rings the burrow's doorbell instead (iPhone Shortcuts or Android Tasker/MacroDroid; needs the helper). Only a label like "text" and an optional name you choose are sent, never the message. A pet runs to the door with an envelope. Settings has step-by-step instructions and a test button.
+
+## Weekly letter
+
+Every Sunday the pets write you a letter about their week: feasts, the weather, moments worth remembering, wishes granted. Letters live in the album and can be sent to a friend as a postcard.
+
+## Backups and the badge
+
+**Save everything** in settings downloads one file with your burrow and the photos on that device; **restore from file** works in settings and on the welcome screen. On installed apps the home-screen icon shows a small number when something needs you (a hungry, muddy or napping pet, a ripe plant, the doorbell, new post or an unread letter).
+
 ## Updating
 
 Edit files, commit, push. Then bump `VERSION` in `sw.js` (e.g. `v2.0.1`) so installed copies fetch the new files. They update the next time they open.
@@ -184,6 +208,10 @@ js/wishes.js          daily wishes
 js/views.js           display-only pieces of the page
 js/util.js            formatting helpers
 js/fireworks.js       new year's fireworks
+js/night.js           moon phases, meteor showers, shooting stars
+js/alerts.js          National Weather Service warnings
+js/letters.js         the weekly letter
+worker/src/doorbell.js  the helper's doorbell
 js/app.js             rendering, actions, loops
 worker/               the optional Cloudflare helper (nudges + AI visitor)
 tests/                node --test unit tests
@@ -195,7 +223,7 @@ tests/                node --test unit tests
 npm test     # or: node --test tests/*.test.mjs
 ```
 
-87 tests cover sixteen species, horizons, the third pet, daily wishes, the new seasonal events, individual looks, outfit appropriateness (5,000 random cases), the weather model, the away diary, friendship, the garden, visitors, photo postcards, and personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
+95 tests cover moon phases and meteor showers, weather warnings, the doorbell, bedtime, weekly letters, sixteen species, horizons, the third pet, daily wishes, the new seasonal events, individual looks, outfit appropriateness (5,000 random cases), the weather model, the away diary, friendship, the garden, visitors, photo postcards, and personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
 
 ## Local preview
 
