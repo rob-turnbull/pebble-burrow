@@ -23,6 +23,8 @@ export function openGame(kind, { being, fx, done }) {
       <p class="hint">${g.blurb}</p>
     </div>`);
   document.body.appendChild(root);
+  root.querySelector('.sheet-top [data-close]').focus();
+  root.addEventListener('keydown', e => { if (e.key !== 'Tab') return; const f = [...root.querySelectorAll('button')].filter(x => x.offsetParent !== null); if (!f.length) return; if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); } });
   const arena = root.querySelector('.arena'), scoreEl = root.querySelector('.score'), bar = root.querySelector('.timer i');
   let score = 0, over = false, cleanup = () => {};
   const setScore = n => { score = n; scoreEl.textContent = n; };

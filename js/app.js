@@ -20,6 +20,9 @@ import * as V from './visitors.js';
 import * as PH from './photo.js';
 import * as HZ from './horizon.js';
 import * as WS from './wishes.js';
+import { esc, fmtAgo, fmtDay } from './util.js';
+import * as Vw from './views.js';
+import { startFireworks } from './fireworks.js';
 import { parseHelper, helperStatus, pushSupport, currentSubscription, enableNudges, disableNudges, testNudge, getMailbox, mailAction, sendPostcard, isMailAddress } from './helper.js';
 import * as Post from './post.js';
 
@@ -55,9 +58,6 @@ let helperNote = '', helperOk = null, nudgesOn = false;
 let fx = null, env = { phase: 'day', t: 0.5, kind: null, cold: false }, lastVoiced = '', lastDecor = '';
 let installEvt = null;
 
-const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const fmtAgo = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 6e4); if (m < 1) return 'just now'; if (m < 60) return m + 'm ago'; const h = Math.round(m / 60); if (h < 24) return h + 'h ago'; return Math.round(h / 24) + 'd ago'; };
-const fmtDay = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 const $ = id => document.getElementById(id);
 const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -210,31 +210,6 @@ function redrawBeings(idx) {
 }
 
 let reportOpen = (() => { try { return localStorage.getItem('pebble-burrow-report') === '1'; } catch { return false; } })();
-function reportHTML() {
-  if (!S.place) return `<section class="report empty"><span>☀️ no weather yet</span><button class="linkbtn" id="rep-town">add your town</button><span class="hint">and the pets will dress for it.</span></section>`;
-  const w = env.wx, c = env.c;
-  if (!w) return `<section class="report empty"><span>${esc(S.place.name)}</span><span class="hint">checking the weather…</span></section>`;
-  const u = S.units, night = env.phase === 'night', windU = u === 'C' ? 'km/h' : 'mph';
-  const fmtH = t => new Date(t).toLocaleTimeString([], { hour: 'numeric' });
-  return `<section class="report">
-    <button class="rep-head" id="rep-toggle" aria-expanded="${reportOpen}">
-      <span class="rep-now"><span class="rep-icon">${c.rainbow ? '🌈' : wxIcon(w.kind, night)}</span><strong>${w.temp}°</strong><span class="rep-sum">${esc(wxSummary(c))}</span></span>
-      <span class="hint">${esc(S.place.name)} ${reportOpen ? '▴' : '▾'}</span></button>
-    ${reportOpen ? `<div class="rep-body">
-      <dl class="rep-stats">
-        <div><dt>feels like</dt><dd>${w.feels ?? w.temp}°${u}</dd></div>
-        <div><dt>wind</dt><dd>${w.wind}${w.gust && w.gust > w.wind + 4 ? `–${w.gust}` : ''} ${windU}</dd></div>
-        ${w.humidity != null ? `<div><dt>humidity</dt><dd>${Math.round(w.humidity)}%</dd></div>` : ''}
-        ${w.hi != null ? `<div><dt>today</dt><dd>${w.lo}° – ${w.hi}°</dd></div>` : ''}
-        <div><dt>sunrise</dt><dd>${fmtClock(env.sun.rise)}</dd></div><div><dt>sunset</dt><dd>${fmtClock(env.sun.set)}</dd></div>
-        ${w.uv != null && !night ? `<div><dt>uv</dt><dd>${Math.round(w.uv)}</dd></div>` : ''}
-      </dl>
-      ${w.hours?.length ? `<ol class="rep-hours">${w.hours.map(h => `<li><span class="hint">${fmtH(h.t)}</span><span class="rep-hi">${wxIcon(h.kind, new Date(h.t).getHours() >= 19 || new Date(h.t).getHours() < 6)}</span><span>${h.temp}°</span>${h.pop != null && h.pop >= 20 ? `<span class="rep-pop">${h.pop}%</span>` : '<span class="rep-pop"></span>'}</li>`).join('')}</ol>` : ''}
-      <ul class="rep-pets">${S.beings.map(b => `<li><strong>${esc(E.first(b))}:</strong> “${esc(O.forecastLine(b, c, w))}”</li>`).join('')}</ul>
-      <p class="hint">updated ${fmtAgo(w.fetchedAt)} · <a href="https://open-meteo.com/" target="_blank" rel="noopener">weather by Open-Meteo</a></p>
-    </div>` : ''}
-  </section>`;
-}
 
 /** Keepsakes that come from the world rather than from care. */
 function earnEnvKeepsakes() {
@@ -271,26 +246,7 @@ function paintDecor() {
   const drift = { autumn: ['🍂', '🍁'], spring: ['🌸', '🌸'] }[env.sea.season];
   if (drift) for (let i = 0; i < 6; i++) h += `<span class="drift" style="left:${8 + i * 15}%;animation-delay:-${i * 2.3}s;animation-duration:${10 + (i % 3) * 3}s">${drift[i % 2]}</span>`;
   layer.innerHTML = h;
-  const fw = $('fireworks'); if (fw) startFireworks(fw);
-}
-function startFireworks(cv) {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const g = cv.getContext('2d'), parts = []; let last = 0;
-  const size = () => { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }; size();
-  const cols = ['#f6cf4f', '#e57fa8', '#7fb8d6', '#86c46f', '#ffffff', '#eb9459'];
-  const loop = t => {
-    if (!cv.isConnected) return;
-    if (document.visibilityState === 'visible') {
-      if (t - last > 1100 + Math.random() * 900) { last = t; const x = cv.width * (0.15 + Math.random() * 0.7), y = cv.height * (0.12 + Math.random() * 0.3), c = cols[Math.floor(Math.random() * cols.length)];
-        for (let i = 0; i < 64; i++) { const a = i / 64 * 6.283, v = 1.6 + Math.random() * 2.2; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, c }); }
-        if (Math.random() < 0.6) Snd.play('thunder'); }
-      g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.34)'; g.fillRect(0, 0, cv.width, cv.height); g.globalCompositeOperation = 'lighter';   // fading trails
-      for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.vx *= 0.97; p.vy *= 0.97; p.life -= 0.017; if (p.life <= 0) { parts.splice(i, 1); continue; } g.globalAlpha = p.life; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, 2.4, 0, 6.283); g.fill(); }
-      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-    }
-    requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
+  const fw = $('fireworks'); if (fw) startFireworks(fw, () => { if (Math.random() < 0.6) Snd.play('thunder'); });
 }
 
 /* ---------------- setup ---------------- */
@@ -436,7 +392,7 @@ function update() {
   if (tab !== 'hill') { below.innerHTML = `<div class="stack">${tabBody(tab)}<p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p></div>`; wireBelow(below, b); return; }
   below.innerHTML = `
   <div class="stack">
-  ${diaryHTML()}
+  ${Vw.diaryHTML(DIARY)}
   <section class="tray" aria-label="tend ${esc(b.name)}">
     <div class="who"><span>tending <strong>${esc(b.name)}</strong></span><span class="hint">${washMode ? 'rub the sponge over them, or tap wash again for a gentle auto-wash' : 'tap a being to switch. keep tapping… they have a secret.'}</span></div>
     <div class="actions">
@@ -452,12 +408,12 @@ function update() {
       ? `<span class="cheese locked" title="unlocks when ${esc(E.first(b))} is grown">🔒 ${g.label}</span>`
       : `<button class="cheese" data-game="${k}">${g.icon} ${g.label}</button>`).join('')}<button class="cheese" id="play-together">🤝 play together</button></div>` : ''}
   </section>
-  ${wishesHTML()}
-  ${reportHTML()}
+  ${Vw.wishesHTML(S, currentWishes())}
+  ${Vw.reportHTML({ S, env, open: reportOpen })}
   <section class="cards">${S.beings.map((x, i) => cardHTML(x, i)).join('')}</section>
-  ${friendHTML()}
+  ${Vw.friendHTML(S)}
   ${scene === 'room' ? roomPanelHTML() : ''}
-  ${installHTML()}
+  ${Vw.installHTML(installEvt, standalone())}
   <p class="law"><b>nothing here ever dies.</b> forgetting just means napping, and coming back means glowing.</p>
   </div>`;
   wireBelow(below, b);
@@ -522,9 +478,9 @@ function paintTabs() {
   badge('hill', DIARY?.entries?.length && tab !== 'hill' ? 1 : 0);
 }
 function tabBody(t) {
-  if (t === 'garden') return gardenHTML();
+  if (t === 'garden') return Vw.gardenHTML({ S, env, plantPick });
   if (t === 'post') return postHTML();
-  if (t === 'album') return `${albumHTML()}${photosHTML()}${visitorBookHTML()}
+  if (t === 'album') return `${Vw.albumHTML(S, albumAll)}${Vw.photosHTML(PH.list())}${Vw.visitorBookHTML(S)}
     <section class="feasts"><div class="row between"><h2>the feast book</h2><span class="hint">${S.beings.reduce((a, x) => a + E.count(x, 'feasts'), 0)} feasts kept</span></div>
     ${S.log.length ? `<ol>${S.log.slice(0, 12).map(l => `<li><span>${l.by ? `<b class="by">${esc(l.by)}</b> fed ${esc(E.first({ name: l.n }))} ${esc(l.c)}` : `${esc(E.first({ name: l.n }))} had ${esc(l.c)}`}</span><span>${fmtAgo(l.t)}</span></li>`).join('')}</ol>` : `<p class="hint">no feasts yet. tap feed on the hill and pick a cheese, the first one goes in the book.</p>`}</section>`;
   return '';
@@ -606,20 +562,7 @@ function roomPanelHTML() {
   </section>`;
 }
 
-function albumHTML() {
-  const items = [...S.album].reverse(), shown = albumAll ? items : items.slice(0, 5);
-  return `<section class="feasts album"><div class="row between"><h2>the album</h2><span class="hint">${S.album.length} keepsake${S.album.length === 1 ? '' : 's'}</span></div>
-    <ol>${shown.map(k => `<li><span><span class="emo" aria-hidden="true">${k.e}</span>${esc(k.text)}</span><span>${fmtDay(k.t)}</span></li>`).join('')}</ol>
-    ${items.length > 5 ? `<button class="linkbtn" id="album-more">${albumAll ? 'show fewer' : `show all ${items.length}`}</button>` : ''}</section>`;
-}
 
-function installHTML() {
-  if (standalone()) return '';
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  return `<section class="install"><strong>keep it on your home screen</strong>
-    ${installEvt ? `<button class="btn" id="i-install">install pebble burrow</button>`
-      : `<span class="hint">${ios ? 'in Safari, tap Share, then “Add to Home Screen”.' : 'in your browser menu, choose “Install app” or “Add to Home screen”.'} it opens full screen, works offline, and can send nudges.</span>`}</section>`;
-}
 
 /* ---------------- actions ---------------- */
 const beingEl = i => document.querySelector(`.being[data-i="${i}"]`);
@@ -726,7 +669,9 @@ function fx_(i, ch, n) { const st = $('stage'), el = beingEl(i); if (!st || !el)
 let lastBubble = 0;
 function bubble(x, y) { if (Date.now() - lastBubble > 140) { lastBubble = Date.now(); Snd.play('bubble'); } const st = $('stage'); const s = document.createElement('span'); s.className = 'bubble'; s.style.left = (x - 7 + (Math.random() * 20 - 10)) + 'px'; s.style.top = (y - 7) + 'px'; st.appendChild(s); setTimeout(() => s.remove(), 1300); }
 function sparkle(i) { update(); fx_(i, '✨', 4); Snd.play('sparkle'); Snd.buzz([10, 40, 10]); }
-function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; if (S?.beings[i]) Snd.play('chirp', { pitch: Snd.voiceOf(S.beings[i].sp) }); el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
+let srAt = 0;
+function speak(text) { const sr = document.getElementById('sr-live'); if (!sr || Date.now() - srAt < 1500) return; srAt = Date.now(); sr.textContent = ''; setTimeout(() => { sr.textContent = text; }, 30); }
+function say(i, txt, ms = 2600) { const el = beingEl(i); if (!el) return; if (S?.beings[i]) speak(`${E.first(S.beings[i])}: ${txt}`); if (S?.beings[i]) Snd.play('chirp', { pitch: Snd.voiceOf(S.beings[i].sp) }); el.querySelector('.say')?.remove(); const b = document.createElement('span'); b.className = 'say'; b.textContent = txt; el.appendChild(b); setTimeout(() => b.remove(), ms); }
 function confetti(custom) { const st = $('stage'); if (!st || matchMedia('(prefers-reduced-motion: reduce)').matches) return; const cols = custom || seasonal().costume ? ['#f08a24', '#6b3fa0', '#2b2230', '#f6cf4f'] : ['#f2c94c', '#e57fa8', '#7fb8d6', '#86c46f'];
   for (let k = 0; k < 40; k++) { const c = document.createElement('span'); c.className = 'confetti'; c.style.left = Math.random() * 100 + '%'; c.style.background = E.rand(cols); c.style.animationDelay = (Math.random() * 1.2) + 's'; st.appendChild(c); setTimeout(() => c.remove(), 4200); } }
 
@@ -918,14 +863,6 @@ function noteAway(now = Date.now()) {
   try { localStorage.setItem('pebble-burrow-diary', JSON.stringify(DIARY)); } catch {}
   return true;
 }
-function diaryHTML() {
-  if (!DIARY?.entries?.length) return '';
-  const t = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const day = ms => new Date(ms).toDateString() === new Date().toDateString() ? '' : new Date(ms).toLocaleDateString(undefined, { weekday: 'short' }) + ' ';
-  return `<section class="diary"><div class="row between"><h2>while you were away</h2><span class="hint">${awayLabel(DIARY.to - DIARY.from)}</span></div>
-    <ol>${DIARY.entries.map(x => `<li><span class="d-time">${day(x.t)}${t(x.t)}</span><span class="d-e" aria-hidden="true">${x.e}</span><span>${esc(x.text)}</span></li>`).join('')}</ol>
-    <button class="linkbtn" id="diary-close">close the diary</button></section>`;
-}
 
 /* ---------------- daily wishes ---------------- */
 let wishList = [], wishDay = '';
@@ -952,13 +889,6 @@ function wish(ev, i, detail = {}) {
     setTimeout(() => { S.beings.forEach((x, j) => { fx_(j, '🌈', 1); flash(j, 'happy', 2000); }); Snd.play('grow'); confetti(); }, 1800 + fin.length * 900);
   }
   touch(); if (view === 'burrow' && !busyTyping()) update();
-}
-function wishesHTML() {
-  const list = currentWishes(); if (!list.length) return '';
-  const open = list.filter(w => !WS.done(S, w)).length;
-  return `<section class="wishes"><div class="row between"><h2>today\u2019s wishes</h2><span class="hint">${open ? `${list.length - open} of ${list.length} granted` : 'all granted! 🌈'}</span></div>
-    <ul>${S.beings.map(b => list.filter(w => w.being === b.id).map(w => { const d = WS.done(S, w), p = Math.min(w.need, WS.progress(S, w.key));
-      return `<li class="${d ? 'done' : ''}"><span class="w-e" aria-hidden="true">${d ? '✅' : w.e}</span><span><strong>${esc(E.first(b))}:</strong> ${esc(w.text)}${w.need > 1 && !d ? ` <span class="hint">(${p}/${w.need})</span>` : ''}</span></li>`; }).join('')).join('')}</ul></section>`;
 }
 
 /* ---------------- a third pet ---------------- */
@@ -992,13 +922,6 @@ function hatchNewcomer() {
 }
 
 /* ---------------- friendship ---------------- */
-function friendHTML() {
-  if (S.beings.length < 2) return '';
-  const f = F.profile(S);
-  return `<section class="friendship"><span class="hearts" aria-label="${f.hearts} of 5 hearts">${'♥'.repeat(f.hearts)}<span class="dim">${'♥'.repeat(5 - f.hearts)}</span></span>
-    <span><strong>${esc(S.beings.map(E.first).join(' & '))}</strong> are ${f.label}</span>
-    <span class="hint">${f.shared} day${f.shared === 1 ? '' : 's'} cared for together${f.next ? ` · ${f.next.in} to ${f.next.label}` : ''}${S.beings.length === 2 && f.index < 2 ? ' · a newcomer may come once they\u2019re good friends' : ''}${S.egg && !S.egg.hatched && S.beings.length === 2 ? ' · 🥚 there\u2019s an egg by the door!' : ''}</span></section>`;
-}
 let lastLevel = null, bondToday = { d: '', n: 0 };
 function together(byYou = false) {
   if (!S || S.beings.length < 2) return;
@@ -1030,17 +953,6 @@ function together(byYou = false) {
 
 /* ---------------- garden ---------------- */
 let plantPick = -1;
-function gardenHTML() {
-  const plots = GD.ensure(S), seeds = GD.plantable(env.sea?.season || 'autumn'), st = GD.stock(S);
-  return `<section class="feasts garden"><div class="row between"><h2>the garden</h2><span class="hint">${env.c?.wet ? 'the rain is watering it' : env.c?.freezing ? 'frosty: growing paused' : env.wx ? 'grows with the real weather' : 'add your town so rain can water it'}</span></div>
-    <div class="plots">${plots.map((p, i) => { const s2 = GD.status(p, env.c || {});
-      return `<div class="plot ${s2.k}"><span class="plot-e">${p.seed ? (p.growth >= 1 ? GD.SEEDS[p.seed].e : p.growth > 0.5 ? '🌿' : p.growth > 0.12 ? '🌱' : '🟤') : '·'}</span>
-        <span class="plot-t">${p.seed ? `<strong>${GD.SEEDS[p.seed].label}</strong><span class="hint">${esc(s2.t)}</span>${s2.k !== 'ripe' ? `<span class="bar full" role="meter" aria-label="grown" aria-valuenow="${Math.round(p.growth * 100)}" title="grown ${Math.round(p.growth * 100)}%"><i style="width:${Math.round(p.growth * 100)}%"></i></span><span class="bar clean" role="meter" aria-label="water" aria-valuenow="${Math.round(p.water)}" title="water ${Math.round(p.water)}%"><i style="width:${Math.round(p.water)}%"></i></span>` : ''}` : '<span class="hint">empty plot</span>'}</span>
-        <span class="plot-b">${!p.seed ? `<button class="btn" data-plot="${i}">plant</button>` : s2.k === 'ripe' ? `<button class="btn" data-harvest="${i}">pick</button>` : `<button class="btn" data-water="${i}">💧 water</button>`}</span>
-        ${plantPick === i ? `<div class="cheeses seeds">${seeds.map(k => `<button class="cheese" data-plant="${i}:${k}">${GD.SEEDS[k].e} ${GD.SEEDS[k].label} <small>${GD.SEEDS[k].hours}h</small></button>`).join('')}</div>` : ''}</div>`; }).join('')}</div>
-    <p class="hint">pantry: ${Object.keys(st).length ? Object.entries(st).map(([k, n]) => `${GD.SEEDS[k].e} ${n}`).join(' · ') + ' (find them in the feed menu)' : 'empty for now'}</p>
-  </section>`;
-}
 function paintGarden() {
   const el = $('garden-hill'); if (!el) return;
   el.innerHTML = GD.ensure(S).map((p, i) => `<span class="gplot ${GD.status(p, env.c || {}).k}" style="left:${20 + i * 9}%">${p.seed ? `<i>${p.growth >= 1 ? GD.SEEDS[p.seed].e : p.growth > 0.5 ? '🌿' : p.growth > 0.12 ? '🌱' : ''}</i>` : ''}</span>`).join('');
@@ -1103,13 +1015,6 @@ function greetVisitor(id) {
   el.classList.add('greeted'); setTimeout(() => { el.remove(); if (visitorEl === el) visitorEl = null; }, 1400);
   touch(); update();
 }
-function visitorBookHTML() {
-  const met = Object.keys(V.VISITORS).filter(id => V.timesMet(S, id) > 0);
-  if (!met.length) return `<section class="feasts book"><div class="row between"><h2>visitor book</h2><span class="hint">0 of ${Object.keys(V.VISITORS).length}</span></div><p class="hint">little visitors drop by depending on the time and the weather. tap one to say hello.</p></section>`;
-  return `<section class="feasts book"><div class="row between"><h2>visitor book</h2><span class="hint">${met.length} of ${Object.keys(V.VISITORS).length}</span></div>
-    <ul class="book-grid">${Object.entries(V.VISITORS).map(([id, v]) => { const n = V.timesMet(S, id);
-      return n ? `<li><span class="b-e">${v.e}</span><span>${esc(v.label)}</span><span class="hint">×${n}</span></li>` : `<li class="unmet" title="${esc(v.hint)}"><span class="b-e">❔</span><span class="hint">${esc(v.hint)}</span></li>`; }).join('')}</ul></section>`;
-}
 
 /* ---------------- photos ---------------- */
 let snapping = false;
@@ -1129,12 +1034,6 @@ async function takePhoto() {
   if (E.keepsake(S, 'photo:first', '📷', 'the first photo on the hill', Date.now())) touch();
   snapping = false; update();
 }
-function photosHTML() {
-  const ps = PH.list();
-  return `<section class="feasts photos"><div class="row between"><h2>photos</h2><span class="hint">${ps.length ? `${ps.length} on this device` : 'tap 📷 on the hill'}</span></div>
-    ${ps.length ? `<div class="photo-grid">${ps.map(p => `<button class="thumb" data-photo="${p.id}" aria-label="photo from ${new Date(p.t).toLocaleString()}"><img src="${p.data}" alt=""></button>`).join('')}</div>
-      <p class="hint">photos stay on this device (up to ${12}). save the ones you love.</p>` : ''}</section>`;
-}
 function viewPhoto(id) {
   const p = PH.list().find(x => x.id === id); if (!p) return;
   const root = document.createElement('div'); root.className = 'modal';
@@ -1142,6 +1041,7 @@ function viewPhoto(id) {
     <img class="photo-big" src="${p.data}" alt="the hill">
     <div class="row"><a class="btn" download="pebble-burrow-${p.id}.jpg" href="${p.data}">save to device</a>${MB?.address ? '<button class="btn" data-send>💌 send as a postcard</button>' : ''}<button class="btn danger" data-del>delete</button></div></div>`;
   document.body.appendChild(root);
+  Post.trapFocus(root); root.querySelector('[data-close]').focus();
   root.querySelector('[data-close]').onclick = () => root.remove();
   root.querySelector('[data-del]').onclick = () => { PH.remove(id); root.remove(); update(); };
   const sendB = root.querySelector('[data-send]');

@@ -27,12 +27,12 @@ export function startLife(count, info) {
         flash(i, 'blink', dur);
         if (Math.random() < 0.16) setTimeout(() => flash(i, 'blink', dur), dur + 120);   // a double blink now and then
       }
-      timers[i * 2] = setTimeout(blinkLoop, lo + Math.random() * (hi - lo));
+      timers[i * 2] = setTimeout(blinkLoop, document.visibilityState === 'visible' ? lo + Math.random() * (hi - lo) : 20000);   // rest while hidden
     };
     const gazeLoop = () => {
       const b = info(i); if (!b) return;
       if (!b.napping && !reduced()) look(i, b);
-      timers[i * 2 + 1] = setTimeout(gazeLoop, 1400 + Math.random() * 3400);
+      timers[i * 2 + 1] = setTimeout(gazeLoop, document.visibilityState === 'visible' ? 1400 + Math.random() * 3400 : 20000);
     };
     timers[i * 2] = setTimeout(blinkLoop, 300 + Math.random() * 3000);        // never in sync from the start
     timers[i * 2 + 1] = setTimeout(gazeLoop, 600 + Math.random() * 2000);

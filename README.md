@@ -123,6 +123,30 @@ Twelve little visitors drop by when the time and weather suit them: a snail mail
 
 Tap 📷 on the hill or in the room to take a photo (they say cheese). Photos stay on the device (the last 12); save them, or send one as a postcard and doodle on top.
 
+## Sixteen species
+
+Moss frog, teacup mouse, ember kit, cloud lamb, button hog, pebble owl, pond lotl and velvet mole, plus clover bunny (upright or floppy ears), puddle duck, ember panda, river otter (with a pebble), tuxedo chick, honey cub, shell snail and dusk bat.
+
+## Your horizon
+
+Every burrow has something in the distance, picked from its id: mountains, a castle, a windmill, a lighthouse by the sea, a forest edge, a playground, a ferris wheel, a farm, a little village or standing stones. It takes its colour from the sky, lights its windows at night, wears snow in winter and fades into fog. You get one free re-roll in settings.
+
+## Getting around
+
+The hill stays at the top. The tab bar switches what's underneath: **hill** (tending, today's wishes, the weather report, the pets), **garden**, **album** (keepsakes, photos, visitor book, feast book), **post** and **settings**. Badges show ripe plants, new postcards and an unread away diary.
+
+## A third pet
+
+When your pair become good friends, an egg appears by the door: a species you don't have yet. Tap it to help it hatch.
+
+## Daily wishes
+
+Each pet asks for two or three small things a day (a particular cheese, three boings, a photo, planting something red, meeting a visitor...), chosen by temperament and only what's possible today. Granting one is worth +12 joy; granting them all brings a rainbow keepsake.
+
+## More seasons
+
+The harvest festival (Nov 10–30), the first snow of each winter, new year's eve fireworks from 6pm, blossom time in early spring, and picnics on summer weekend afternoons, on top of Halloween and the winter lights.
+
 ## Updating
 
 Edit files, commit, push. Then bump `VERSION` in `sw.js` (e.g. `v2.0.1`) so installed copies fetch the new files. They update the next time they open.
@@ -155,6 +179,11 @@ js/friends.js         friendship and moments together
 js/garden.js          the weather garden and pantry
 js/visitors.js        visitors and the visitor book
 js/photo.js           photo mode
+js/horizon.js         the distant scenery
+js/wishes.js          daily wishes
+js/views.js           display-only pieces of the page
+js/util.js            formatting helpers
+js/fireworks.js       new year's fireworks
 js/app.js             rendering, actions, loops
 worker/               the optional Cloudflare helper (nudges + AI visitor)
 tests/                node --test unit tests
@@ -166,7 +195,7 @@ tests/                node --test unit tests
 npm test     # or: node --test tests/*.test.mjs
 ```
 
-78 tests cover individual looks, outfit appropriateness (5,000 random cases), the weather model, the away diary, friendship, the garden, visitors, photo postcards, and personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
+87 tests cover sixteen species, horizons, the third pet, daily wishes, the new seasonal events, individual looks, outfit appropriateness (5,000 random cases), the weather model, the away diary, friendship, the garden, visitors, photo postcards, and personalities and learning, games, room unlocks and merges, the postcard mailbox (validation, approvals, blocking, rate limits, CORS), and the nothing-dies rule, napping and waking, weather and night decay, migration from older saves, merge sync (concurrent care, idempotence, order independence, starting over), growth and unlocks, Halloween and hemisphere seasons, sunrise/sunset accuracy, nudge rules (quiet hours, daily cap, gaps), Web Push encryption checked against an independent decrypt, VAPID signatures, and the AI-visitor connector end to end.
 
 ## Local preview
 

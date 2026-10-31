@@ -3,6 +3,16 @@ const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;
 export const safeDoodle = d => /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(d || '') ? d : '';
 const INK = ['#2f2a3a', '#e57fa8', '#f08a24', '#86c46f', '#7fb8d6'];
 
+/** Keep Tab inside an open dialog. */
+export function trapFocus(root) {
+  root.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const f = [...root.querySelectorAll('button,input,select,textarea,a[href],canvas,[tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!f.length) return; const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
+
 export function cardHTML(c, { mine = false } = {}) {
   const d = safeDoodle(c.doodle);
   return `<article class="postcard" data-card="${esc(c.id || '')}">
@@ -73,6 +83,7 @@ export function compose({ friends, beings, me, send, addFriend, isAddress, fx, i
     } catch (e) { msg.textContent = e.message; $('pc-send').disabled = false; }
   };
   $('pc-note').focus();
+  trapFocus(root);
 }
 
 /** Half-size PNG keeps cards well under the mailbox limit. */

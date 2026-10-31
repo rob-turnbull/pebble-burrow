@@ -119,7 +119,8 @@ export class WeatherFX {
     this.clouds.innerHTML = Array.from({ length: cloudy }, (_, i) =>
       `<span style="top:${8 + (i * 17) % 42}%;left:0;animation-duration:${60 + i * 18}s;animation-delay:-${i * 13}s;transform:scale(${0.7 + (i % 3) * 0.25})"></span>`).join('');
     this.stage.dataset.wx = kind;
-    const n = { drizzle: 40, rain: 120, storm: 180, snow: 70 }[kind] || 0;
+    const scale = Math.min(1, Math.max(0.45, (this.w || 400) / 700));      // phones get fewer drops; it looks the same
+    const n = Math.round(({ drizzle: 40, rain: 120, storm: 180, snow: 70 }[kind] || 0) * scale);
     this.parts = Array.from({ length: this.reduced ? Math.min(n, 20) : n }, () => this.spawn(true));
     cancelAnimationFrame(this.raf);
     this.ctx.clearRect(0, 0, this.w, this.h);
@@ -134,6 +135,7 @@ export class WeatherFX {
       r: snow ? 1.5 + Math.random() * 2.5 : 0, ph: Math.random() * 6.28 };
   }
   loop() {
+    if (document.visibilityState !== 'visible' || !this.stage.isConnected) { this.raf = requestAnimationFrame(this.loop); if (!this.stage.isConnected) cancelAnimationFrame(this.raf); return; }
     const c = this.ctx, snow = this.kind === 'snow', slant = this.wind / 12;
     c.clearRect(0, 0, this.w, this.h);
     c.strokeStyle = 'rgba(200,220,255,.55)'; c.fillStyle = 'rgba(255,255,255,.9)'; c.lineWidth = this.kind === 'drizzle' ? 1 : 1.4;
